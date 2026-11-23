@@ -5,18 +5,20 @@ SCENARIO ?= write
 NAME     ?= capture
 DURATION ?= 30
 ARGS     ?=
+HOST     ?=
 
 # Git Bash on Windows rewrites container paths like /src; this turns that off (no effect elsewhere).
 export MSYS_NO_PATHCONV := 1
 
-.PHONY: help test lab-up lab-down lab-logs attack alerts capture
+.PHONY: help test lab-up lab-down lab-logs attack alerts capture record-fixtures
 
 help:
 	@echo "make test                         lint + suricata -T + pcap replay (Suricata 8.0.7 container)"
 	@echo "make lab-up                       build and start PLC, HMI and Suricata sensor"
 	@echo "make attack SCENARIO=<name>       scan | write | listen-only | restart-comms | flood"
 	@echo "make alerts [ARGS=...]            show LM-OT alerts from lab/out/eve.json"
-	@echo "make capture NAME=x DURATION=30   record lab traffic to lab/out/x.pcap"
+	@echo "make capture NAME=x DURATION=30 [HOST=ip]  record lab traffic to lab/out/x.pcap"
+	@echo "make record-fixtures             re-record tests/suricata/lab/*.pcap from the running lab"
 	@echo "make lab-logs / make lab-down"
 
 test:
@@ -38,4 +40,7 @@ alerts:
 	docker run --rm -v "$(CURDIR)/lab:/lab:ro" --entrypoint python3 $(SURICATA_IMAGE) /lab/tools/alerts.py /lab/out/eve.json $(ARGS)
 
 capture:
-	$(COMPOSE) run --rm capture $(NAME) $(DURATION)
+	$(COMPOSE) run --rm capture $(NAME) $(DURATION) $(HOST)
+
+record-fixtures:
+	sh lab/tools/record_fixtures.sh
