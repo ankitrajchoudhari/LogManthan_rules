@@ -7,12 +7,13 @@ Priority: `1` = Critical (opens a case), `2` = Medium (alert only), `3` = Low.
 
 | SID | msg | priority | MITRE ATT&CK for ICS | test fixture |
 |---|---|---|---|---|
-| 9100001 | LM-OT Modbus write from unauthorised host | 1 | T0855, T0836 | `bro_modbus_modbus` |
-| 9100002 | LM-OT Modbus diagnostics Force Listen Only Mode (device goes silent) | 1 | T0814 | `bro_modbus_modbus` |
-| 9100003 | LM-OT Modbus diagnostics Restart Communications | 1 | T0816 | `bro_modbus_modbus` |
-| 9100004 | LM-OT Modbus Read Device Identification (fingerprinting) | 2 | T0846 | `bro_modbus_modbus` |
+| 9100001 | LM-OT Modbus write from unauthorised host | 1 | T0855, T0836 | `bro_modbus_modbus`, `lab_write` |
+| 9100002 | LM-OT Modbus diagnostics Force Listen Only Mode (device goes silent) | 1 | T0814 | `bro_modbus_modbus`, `lab_listen_only` |
+| 9100003 | LM-OT Modbus diagnostics Restart Communications | 1 | T0816 | `bro_modbus_modbus`, `lab_restart_comms` |
+| 9100004 | LM-OT Modbus Read Device Identification (fingerprinting) | 2 | T0846 | `bro_modbus_modbus`, `lab_scan` |
 | 9100005 | LM-OT Modbus user-defined or reserved function code | 2 | T0855 | **none yet** |
-| 9100006 | LM-OT Modbus scan - many connections from one host | 2 | T0846 | **none yet** (lab `scan`, phase 2/3) |
+| 9100006 | LM-OT Modbus scan - many connections from one host | 2 | T0846 | `lab_scan` |
+| 9100007 | LM-OT Modbus request flood from one host | 2 | T0814 | `lab_flood` |
 | 9100010 | LM-OT DNP3 Cold Restart command | 1 | T0816 | `dnp3_cold_restart_and_response` |
 | 9100011 | LM-OT DNP3 Warm Restart command | 1 | T0816 | `dnp3_warm_restart_and_response` |
 | 9100012 | LM-OT DNP3 Direct Operate from non-master | 1 | T0855 | `dnp3_directoperate_and_response`, `dnp3_direct_operate_analog_output` |
@@ -25,4 +26,9 @@ Priority: `1` = Critical (opens a case), `2` = Medium (alert only), `3` = Low.
 | 9100030 | LM-OT S7comm PLC STOP request | 1 | T0858, T0816 | **none yet** |
 | 9100040 | LM-OT Remote service connection from IT into OT | 1 | T0886 | **none yet** |
 
-Should-not-fire (silent) fixture: `dnp3_read_and_response` (normal DNP3 read, no LM SID may fire).
+Should-not-fire (silent) fixtures:
+- `dnp3_read_and_response`: normal DNP3 read; no LM SID may fire.
+- `lab_hmi_normal`: normal HMI polling plus allowed writes; no LM SID may fire (covers 9100001 and 9100007).
+
+`lab_*` fixtures are our own lab captures in `tests/suricata/lab/` and use `exact` matching:
+the expected SIDs must fire and no other LM SID may.
