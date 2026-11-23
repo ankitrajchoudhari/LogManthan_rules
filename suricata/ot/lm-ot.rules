@@ -23,11 +23,18 @@ alert modbus any any -> $OT_NET 502 (msg:"LM-OT Modbus user-defined or reserved 
 
 alert tcp !$OT_WRITERS any -> $OT_NET 502 (msg:"LM-OT Modbus scan - many connections from one host"; flow:to_server; flags:S; threshold:type both, track by_src, count 20, seconds 60; classtype:attempted-recon; metadata:mitre_ics T0846, lm_severity high; priority:2; sid:9100006; rev:1;)
 
-# Request flood: >300 Modbus requests in 10 s from one source (30 req/s).
-# Tuning data: lab HMI ~21 requests per 10 s; the busiest 10 s window of a real master in the
-# ITI bro/modbus capture is 104 (avg 9.4 req/s). 300 leaves ~3x headroom over that.
-# Raise the count for sites that poll faster. dsize:>0 counts request packets, not bare TCP ACKs.
-alert modbus any any -> $OT_NET 502 (msg:"LM-OT Modbus request flood from one host"; flow:to_server,established; dsize:>0; threshold:type both, track by_src, count 300, seconds 10; classtype:attempted-dos; metadata:mitre_ics T0814, lm_severity medium; priority:2; sid:9100007; rev:1;)
+# Request flood, two tiers. dsize:>0 counts request packets, not bare TCP ACKs. The first request
+# of each connection is not counted (it arrives before the Modbus parser is attached), so a burst
+# of N requests over C connections counts as N - C.
+# 9100007: 300 requests in 10 s (30 req/s) from a host that is NOT an allowed writer.
+#   Unknown sources have no reason to poll at all. Tuning data: lab HMI ~21 requests per 10 s;
+#   the busiest 10 s of the master in ITI bro/modbus is 104.
+# 9100008: 1000 requests in 10 s (100 req/s) from ANY host, to catch a flood from a compromised
+#   allowed host (HMI/SCADA). The fastest legitimate poller we have data for, the master in
+#   ITI ModbusTCP (~62 req/s), peaks at 663 per 10 s: ~1.5x headroom. Raise it for faster sites.
+alert modbus !$OT_WRITERS any -> $OT_NET 502 (msg:"LM-OT Modbus request flood from unknown host"; flow:to_server,established; dsize:>0; threshold:type both, track by_src, count 300, seconds 10; classtype:attempted-dos; metadata:mitre_ics T0814, lm_severity medium; priority:2; sid:9100007; rev:2;)
+
+alert modbus any any -> $OT_NET 502 (msg:"LM-OT Modbus request flood from any host (incl. allowed writers)"; flow:to_server,established; dsize:>0; threshold:type both, track by_src, count 1000, seconds 10; classtype:attempted-dos; metadata:mitre_ics T0814, lm_severity medium; priority:2; sid:9100008; rev:1;)
 
 # ---------- DNP3 (port 20000) ----------
 alert dnp3 any any -> $OT_NET any (msg:"LM-OT DNP3 Cold Restart command"; dnp3_func:13; classtype:attempted-dos; metadata:mitre_ics T0816, lm_severity critical; priority:1; sid:9100010; rev:1;)

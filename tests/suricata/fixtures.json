@@ -19,6 +19,20 @@
       "ENG_WS": "[10.10.1.30]",
       "DNP3_MASTERS": "[10.10.1.40]",
       "IT_NET": "[10.10.1.128/25]"
+    },
+    "lab_compromised_writer": {
+      "OT_NET": "[10.10.1.10]",
+      "OT_WRITERS": "[10.10.1.20,10.10.1.66]",
+      "ENG_WS": "[10.10.1.30]",
+      "DNP3_MASTERS": "[10.10.1.40]",
+      "IT_NET": "[10.10.1.128/25]"
+    },
+    "iti_master_allowed": {
+      "OT_NET": "any",
+      "OT_WRITERS": "![203.0.113.0/24]",
+      "ENG_WS": "[203.0.113.2]",
+      "DNP3_MASTERS": "[203.0.113.3]",
+      "IT_NET": "[203.0.113.0/24]"
     }
   },
   "fixtures": [
@@ -180,12 +194,46 @@
       "exact": true
     },
     {
+      "id": "lab_flood_heavy",
+      "path": "tests/suricata/lab/lab_flood_heavy.pcap",
+      "sha256": "de9f78d7b4a130a0349c8782c8ce220c0cae849974601180c917b6ada6b8ab85",
+      "vars": "lab",
+      "expect": "fire",
+      "expect_sids": [
+        9100007,
+        9100008
+      ],
+      "exact": true
+    },
+    {
+      "id": "lab_flood_heavy_allowed_writer",
+      "path": "tests/suricata/lab/lab_flood_heavy.pcap",
+      "sha256": "de9f78d7b4a130a0349c8782c8ce220c0cae849974601180c917b6ada6b8ab85",
+      "vars": "lab_compromised_writer",
+      "expect": "fire",
+      "expect_sids": [
+        9100008
+      ],
+      "exact": true
+    },
+    {
       "id": "lab_hmi_normal",
       "path": "tests/suricata/lab/lab_hmi_normal.pcap",
       "sha256": "e6aa6755a9aa1da45aa43b4a2ba961074b8be0fdd13973d8f5f19f8f573e6340",
       "vars": "lab",
       "expect": "silent",
       "expect_sids": []
+    },
+    {
+      "id": "iti_modbustcp_master_allowed",
+      "url": "https://raw.githubusercontent.com/ITI/ICS-Security-Tools/master/pcaps/ModbusTCP/ModbusTCP.pcap",
+      "sha256": "ae5e7b3101bd2f49390cfd77376ed176389aba9360307dd424dab51b339c5593",
+      "vars": "iti_master_allowed",
+      "expect": "absent",
+      "expect_sids": [
+        9100007,
+        9100008
+      ]
     }
   ]
 }

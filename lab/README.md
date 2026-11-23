@@ -48,13 +48,16 @@ make lab-down
 | `listen-only` | FC8 Diagnostics, sub-function 4 Force Listen Only Mode | T0814 | 9100002 | 1 |
 | `restart-comms` | FC8 Diagnostics, sub-function 1 Restart Communications | T0816 | 9100003 | 1 |
 | `flood` | 1000 FC3 reads in a burst over 4 connections | T0814 | 9100007 | 2 |
+| `"flood --count 3000"` | 3000 FC3 reads in a burst (~1.8 s) over 4 connections | T0814 | 9100007, 9100008 | 2, 2 |
 
 Baseline: HMI-only traffic (reads plus the allowed write from 10.10.1.20) must raise **no priority:1 alerts**.
 Check with `make alerts ARGS="--forbid-priority 1"` before running any attack.
 
 Notes:
-- `flood` is caught by the request-rate rule 9100007 (more than 300 Modbus requests in 10 s from one
-  host). The HMI sends ~21 per 10 s. It uses only 4 connections, so it does not trip the connection-count
+- `flood` is caught by the request-rate rule 9100007 (300 Modbus requests in 10 s from a host that is
+  not in `OT_WRITERS`). The HMI sends ~21 per 10 s. 9100008 (1000 in 10 s from any host, including
+  allowed writers) needs the heavier burst: `make attack SCENARIO="flood --count 3000"`. The first
+  request on each connection is not counted, so 1000 requests over 4 connections count as 996. It uses only 4 connections, so it does not trip the connection-count
   rule 9100006 (20 SYNs in 60 s), which belongs to `scan`.
 - `listen-only`: a real device would stop answering until it receives Restart Communications
   (`restart-comms`) or is power-cycled. The pymodbus lab PLC keeps answering, so the HMI is not

@@ -13,7 +13,8 @@ Priority: `1` = Critical (opens a case), `2` = Medium (alert only), `3` = Low.
 | 9100004 | LM-OT Modbus Read Device Identification (fingerprinting) | 2 | T0846 | `bro_modbus_modbus`, `lab_scan` |
 | 9100005 | LM-OT Modbus user-defined or reserved function code | 2 | T0855 | **none yet** |
 | 9100006 | LM-OT Modbus scan - many connections from one host | 2 | T0846 | `lab_scan` |
-| 9100007 | LM-OT Modbus request flood from one host | 2 | T0814 | `lab_flood` |
+| 9100007 | LM-OT Modbus request flood from unknown host (rev 2: was any host) | 2 | T0814 | `lab_flood`, `lab_flood_heavy` |
+| 9100008 | LM-OT Modbus request flood from any host (incl. allowed writers) | 2 | T0814 | `lab_flood_heavy`, `lab_flood_heavy_allowed_writer` |
 | 9100010 | LM-OT DNP3 Cold Restart command | 1 | T0816 | `dnp3_cold_restart_and_response` |
 | 9100011 | LM-OT DNP3 Warm Restart command | 1 | T0816 | `dnp3_warm_restart_and_response` |
 | 9100012 | LM-OT DNP3 Direct Operate from non-master | 1 | T0855 | `dnp3_directoperate_and_response`, `dnp3_direct_operate_analog_output` |
@@ -28,7 +29,10 @@ Priority: `1` = Critical (opens a case), `2` = Medium (alert only), `3` = Low.
 
 Should-not-fire (silent) fixtures:
 - `dnp3_read_and_response`: normal DNP3 read; no LM SID may fire.
-- `lab_hmi_normal`: normal HMI polling plus allowed writes; no LM SID may fire (covers 9100001 and 9100007).
+- `lab_hmi_normal`: normal HMI polling plus allowed writes; no LM SID may fire (covers 9100001, 9100007 and 9100008).
+- `iti_modbustcp_master_allowed` (`absent`): ITI ModbusTCP, a real master polling at ~62 requests/s
+  (peak 663 in 10 s), with every non-test host in `OT_WRITERS`; neither 9100007 nor 9100008 may fire.
 
 `lab_*` fixtures are our own lab captures in `tests/suricata/lab/` and use `exact` matching:
-the expected SIDs must fire and no other LM SID may.
+the expected SIDs must fire and no other LM SID may. `lab_flood_heavy_allowed_writer` replays the
+heavy flood with the attacker added to `OT_WRITERS` (a compromised allowed host): only 9100008 fires.
