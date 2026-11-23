@@ -12,6 +12,8 @@ LogManthan ingests **Suricata alerts only**, so all OT protocol detection is don
 | `suricata/ot/lm-ot.rules` | OT signatures: Modbus, DNP3, EtherNet/IP, S7comm, IT→OT |
 | `tests/suricata/fixtures.json` | Test captures: URL + SHA-256 + expected SIDs |
 | `scripts/test_suricata.py` | Lint + `suricata -T` + pcap replay tests |
+| `lab/` | Docker OT lab: Modbus PLC, HMI, attacker, Suricata sensor ([lab/README.md](lab/README.md)) |
+| `Makefile` | `make test`, `make lab-up`, `make attack SCENARIO=...`, `make alerts`, `make capture` |
 | `SIDS.md` | SID registry |
 | `ATTRIBUTION.md` | Credits for third-party captures |
 | `SECURITY.md` | Reporting issues, what must never be committed |
@@ -37,9 +39,9 @@ Needs Python 3 and Suricata 8 (`SURICATA` env var picks the binary, default `sur
 python3 scripts/test_suricata.py
 ```
 
-No local Suricata? Use the container:
+No local Suricata? Use the Suricata 8.0.7 container (same image as CI, pinned by digest):
 ```sh
-docker run --rm -v "$PWD:/src" -w /src --entrypoint python3 jasonish/suricata:8.0.7 scripts/test_suricata.py
+make test
 ```
 
 The runner:
