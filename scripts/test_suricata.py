@@ -6,7 +6,8 @@
 3. Dynamic   replay each fixture capture and check which LM SIDs fire.
 
 Standard library only. Suricata binary comes from env var SURICATA (default "suricata").
-Captures are downloaded to .cache/ and verified by SHA-256; they are never committed.
+External captures are downloaded to .cache/ and never committed; our own lab captures live in
+tests/suricata/lab/. Every capture is verified by SHA-256 before use.
 """
 
 import hashlib
@@ -23,6 +24,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RULES_DIR = ROOT / "suricata"
 FIXTURES = ROOT / "tests" / "suricata" / "fixtures.json"
+SIDS_MD = ROOT / "SIDS.md"
+LAB_CLASSIFICATION = ROOT / "lab" / "suricata" / "classification.config"
 CACHE = ROOT / ".cache" / "pcaps"
 SURICATA = os.environ.get("SURICATA", "suricata")
 
@@ -63,10 +66,26 @@ def iter_rules():
                 yield f, n, s
 
 
+def lab_classtypes():
+    names = set()
+    for line in LAB_CLASSIFICATION.read_text(encoding="utf-8").splitlines():
+        m = re.match(r"\s*config classification:\s*([^,\s]+)\s*,", line)
+        if m:
+            names.add(m.group(1))
+    return names
+
+
+def registered_sids():
+    text = SIDS_MD.read_text(encoding="utf-8")
+    return {int(x) for x in re.findall(r"^\|\s*(\d{7})\s*\|", text, re.M)}
+
+
 def lint():
     errors = []
     seen = {}
     count = 0
+    classtypes = lab_classtypes()
+    registry = registered_sids()
     for f, n, rule in iter_rules():
         where = f"{f.relative_to(ROOT).as_posix()}:{n}"
         action = rule.split(None, 1)[0].lower()
@@ -81,6 +100,11 @@ def lint():
         for kw in ("priority:", "metadata:", "sid:", "rev:"):
             if not re.search(r"[(;]\s*" + kw, rule):
                 errors.append(f"{where}: missing {kw}")
+        ct = re.search(r"[(;]\s*classtype:\s*([^;\s]+)\s*;", rule)
+        if not ct:
+            errors.append(f"{where}: missing classtype:")
+        elif ct.group(1) not in classtypes:
+            errors.append(f"{where}: classtype {ct.group(1)} not defined in lab/suricata/classification.config")
         if not re.search(r"metadata:[^;]*\bmitre_ics\s+T\d{4}", rule):
             errors.append(f"{where}: missing metadata:mitre_ics Txxxx")
         if re.search(r"[(;]\s*lua(jit)?\s*:", rule, re.I):
@@ -90,6 +114,8 @@ def lint():
             sid = int(m.group(1))
             if not SID_MIN <= sid <= SID_MAX:
                 errors.append(f"{where}: sid {sid} outside {SID_MIN}-{SID_MAX}")
+            if sid not in registry:
+                errors.append(f"{where}: sid {sid} not registered in SIDS.md")
             if sid in seen:
                 errors.append(f"{where}: sid {sid} reused (first at {seen[sid]})")
             else:
@@ -147,6 +173,13 @@ def sha256(path):
 
 
 def fetch(fx):
+    """Return a verified capture: a repo file ("path") or a download cached in .cache/ ("url")."""
+    if "path" in fx:
+        dest = ROOT / fx["path"]
+        got = sha256(dest)
+        if got != fx["sha256"]:
+            raise ValueError(f"SHA-256 mismatch (expected {fx['sha256']}, got {got}); refusing capture")
+        return dest
     CACHE.mkdir(parents=True, exist_ok=True)
     dest = CACHE / f"{fx['id']}.pcap"
     if not dest.exists():
@@ -199,6 +232,7 @@ def main():
 
     data = json.loads(FIXTURES.read_text(encoding="utf-8"))
     variables = data["vars"]
+    var_sets = data.get("var_sets", {})
 
     print("== Static (suricata -T) ==")
     ver = subprocess.run([SURICATA, "-V"], capture_output=True, text=True)
@@ -224,20 +258,24 @@ def main():
         fixtures = data["fixtures"]
         for fx in fixtures:
             expected = sorted(fx.get("expect_sids", []))
+            fx_vars = var_sets[fx["vars"]] if "vars" in fx else variables
             try:
                 pcap = fetch(fx)
-                got = sorted(replay(pcap, rules, variables))
+                got = sorted(replay(pcap, rules, fx_vars))
             except Exception as exc:  # report and continue with the next fixture
                 print(f"  FAIL {fx['id']} expected={fx['expect']}:{expected} error={exc}")
                 failed = True
                 continue
-            if fx["expect"] == "fire":
+            if fx["expect"] == "fire" and fx.get("exact"):
+                ok = set(expected) == set(got)  # no other LM SID may fire
+            elif fx["expect"] == "fire":
                 ok = set(expected) <= set(got)
             elif fx["expect"] == "silent":
                 ok = not got
             else:
                 ok = False
-            print(f"  {'PASS' if ok else 'FAIL'} {fx['id']} expected={fx['expect']}:{expected} got={got}")
+            mode = "exact" if fx.get("exact") else fx["expect"]
+            print(f"  {'PASS' if ok else 'FAIL'} {fx['id']} expected={mode}:{expected} got={got}")
             passed += ok
         print(f"{passed}/{len(fixtures)} dynamic tests passed")
         if passed != len(fixtures):
