@@ -4,7 +4,7 @@
 #   sh lab/tools/record_fixtures.sh write scan # some
 # Each attack capture is filtered to the attacker (10.10.1.66), so it holds one scenario only.
 # The HMI capture is filtered to the HMI (10.10.1.20) and restarts the HMI so the TCP handshake
-# is included. Afterwards, update sha256 in tests/suricata/fixtures.json with the printed values.
+# is included; the DNP3 master baseline likewise (10.10.1.40, 10 minutes of normal polling). Afterwards, update sha256 in tests/suricata/fixtures.json with the printed values.
 set -eu
 export MSYS_NO_PATHCONV=1
 
@@ -12,6 +12,7 @@ COMPOSE="docker compose -f lab/docker-compose.yml"
 DEST=tests/suricata/lab
 ATTACKER=10.10.1.66
 HMI=10.10.1.20
+MASTER=10.10.1.40
 mkdir -p "$DEST"
 
 wait_capture_started() {
@@ -51,7 +52,20 @@ record_hmi() {  # record_hmi <seconds>
   save hmi_normal
 }
 
-[ $# -eq 0 ] && set -- scan write listen-only restart-comms flood flood-heavy hmi
+record_dnp3_master() {  # record_dnp3_master <seconds>
+  $COMPOSE run --rm capture dnp3_master_normal "$1" "$MASTER" > /dev/null 2>&1 &
+  pid=$!
+  wait_capture_started
+  $COMPOSE restart dnp3-master > /dev/null 2>&1
+  echo "record: dnp3-master restarted, capturing $1 s of normal polling"
+  wait "$pid"
+  save dnp3_master_normal
+}
+
+# Build the attacker image first, so a rebuild never eats into a capture window.
+$COMPOSE --profile attack build attacker > /dev/null
+
+[ $# -eq 0 ] && set -- scan write listen-only restart-comms flood flood-heavy hmi   dnp3-cold-restart dnp3-warm-restart dnp3-direct-operate dnp3-write dnp3-disable-unsolicited dnp3-master
 for s in "$@"; do
   case "$s" in
     scan)  record_attack scan 25 ;;
@@ -59,6 +73,9 @@ for s in "$@"; do
     flood-heavy) record_attack flood 20 flood_heavy --count 3000 ;;
     write|listen-only|restart-comms) record_attack "$s" 12 ;;
     hmi)   record_hmi 130 ;;
+    dnp3-cold-restart|dnp3-warm-restart|dnp3-direct-operate|dnp3-write|dnp3-disable-unsolicited)
+           record_attack "$s" 12 ;;
+    dnp3-master) record_dnp3_master 600 ;;
     *) echo "record: unknown scenario $s" >&2; exit 2 ;;
   esac
 done

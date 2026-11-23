@@ -54,7 +54,7 @@ lab-logs:
 	$(COMPOSE) logs --tail 50
 
 attack:
-	$(COMPOSE) run --rm attacker $(SCENARIO)
+	$(COMPOSE) run --rm --build attacker $(SCENARIO)
 
 alerts:
 	docker run --rm -v "$(CURDIR)/lab:/lab:ro" --entrypoint python3 $(SURICATA_IMAGE) /lab/tools/alerts.py /lab/out/eve.json $(ARGS)
