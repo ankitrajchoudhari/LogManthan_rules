@@ -4,7 +4,8 @@ OT (industrial control system) detection rules for the LogManthan SOC platform, 
 and lab used to check them.
 
 LogManthan ingests **Suricata alerts only**, so all OT protocol detection is done with Suricata rules
-(`suricata/`). Sigma (`sigma/`, phase 5) only correlates multi-step behaviour on top, by Suricata SID.
+(`suricata/`). Sigma (`sigma/`) only correlates multi-step behaviour on top, by Suricata SID
+([sigma/README.md](sigma/README.md)).
 
 ## Layout
 | Path | What |
@@ -13,8 +14,12 @@ LogManthan ingests **Suricata alerts only**, so all OT protocol detection is don
 | `tests/suricata/fixtures.json` | Test captures: URL or repo path + SHA-256 + expected SIDs |
 | `tests/suricata/lab/` | Our own small lab captures (one per attack scenario + normal HMI traffic) |
 | `scripts/test_suricata.py` | Lint + `suricata -T` + pcap replay tests |
+| `sigma/rules/` | Sigma base rules and correlations over LM-OT alerts ([sigma/README.md](sigma/README.md)) |
+| `sigma/pipelines/logmanthan-fields.yml` | The one place Sigma field names are defined (TODO(rajeev): confirm) |
+| `tests/sigma/` | Sigma test events (alerts from the lab captures) and correlation scenarios |
+| `scripts/test_sigma.py` | `sigma check` + field/SID sync + correlation scenario tests |
 | `lab/` | Docker OT lab: Modbus PLC, HMI, attacker, Suricata sensor ([lab/README.md](lab/README.md)) |
-| `Makefile` | `make test`, `make lab-up`, `make attack SCENARIO=...`, `make alerts`, `make capture` |
+| `Makefile` | `make test`, `make sigma-test`, `make lab-up`, `make attack SCENARIO=...`, `make alerts`, `make capture` |
 | `tuning/` | Rate limits for Suricata's bundled Modbus/DNP3 event rules, for LogManthan ([tuning/README.md](tuning/README.md)) |
 | `SIDS.md` | SID registry |
 | `ATTRIBUTION.md` | Credits for third-party captures |
@@ -54,22 +59,29 @@ The runner:
    harmless environment warnings listed (with a reason) in `IGNORED_WARNINGS` in the script.
 3. **Dynamic** verifies each capture's SHA-256 (external ones are downloaded into `.cache/` first), replays
    it (again failing on any warning), and checks that the expected SIDs fire, or that nothing fires for
-   `silent` fixtures. Fixtures marked `exact` fail if any other LM SID fires too.
+   `silent` fixtures. Fixtures marked `exact` fail if any other LM SID fires too. Replays run
+   single-threaded (`--runmode single`): with several threads, threshold rules gave different counts
+   from run to run.
 
 4. **Tuning** replays every capture (plus ITI `ModbusTCP.pcap`) with Suricata's bundled
    `modbus-events.rules` and `dnp3-events.rules`, without and with `tuning/threshold.config`. It fails if
    a capture's event-alert count goes above its limit in `tests/suricata/tuning.json`, if an event is
-   silenced completely, or if the LM-OT SIDs change.
+   silenced completely, or if the LM-OT SIDs change. The bundled rule files come from the Suricata
+   binary under test (`--build-info` datarootdir), and the test fails clearly if its version is not the
+   one the limits were measured on.
 
 Any Suricata warning or error line fails the run, even if Suricata exits 0.
 
 Fixture fields: `id`, `url` (external, downloaded) or `path` (in the repo), `sha256`,
-`expect` (`fire` / `silent`), `expect_sids`, optional `exact: true`, and optional `vars` naming a set in
+`expect` (`fire` / `silent` / `absent`: none of `expect_sids` may fire), `expect_sids`, optional `exact: true`, and optional `vars` naming a set in
 `var_sets` (the lab captures use the lab's address groups; the rest use the top-level `vars`).
 
 Suricata settings are passed with `--set`; there is no custom `suricata.yaml` in the repo.
 CI (`.github/workflows/test.yml`) runs gitleaks, then the same tests inside the `jasonish/suricata:8.0.7`
-image pinned by digest (the production version), on every push and pull request.
+image pinned by digest (the production version), checks the Sigma test events against a fresh replay,
+and runs the Sigma tests with the hash-pinned tools, on every push and pull request.
+
+Sigma tests (Python 3.11+): `make sigma-setup` once, then `make sigma-test`. See [sigma/README.md](sigma/README.md).
 
 ## Secrets
 ```sh

@@ -15,6 +15,7 @@
 **Lab captures (`tests/suricata/lab/`)**
 - Original captures recorded from this repo's own Docker lab (`make record-fixtures`).
 - Synthetic traffic between lab containers on 10.10.1.0/24 only; no real hosts or data.
+- The Sigma test events in `tests/sigma/events/` are Suricata alerts replayed from these captures.
 - Licensed with the rules under the Detection Rule License 1.1.
 
 ## Licence text
