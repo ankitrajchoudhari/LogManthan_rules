@@ -206,8 +206,8 @@ def fetch(fx):
     return dest
 
 
-def replay_alerts(pcap, rules, variables, extra_sets=()):
-    """Replay a capture and return its eve.json alert events (all SIDs), in eve order."""
+def replay_eve(pcap, rules, variables, extra_sets=()):
+    """Replay a capture and return all its eve.json events (alert, anomaly, flow, ...), in eve order."""
     with tempfile.TemporaryDirectory() as logdir:
         # --runmode single: with several worker threads, packets reach threshold counters out of
         # timestamp order, so threshold/limit rules give different counts run to run (seen on
@@ -223,17 +223,37 @@ def replay_alerts(pcap, rules, variables, extra_sets=()):
         warnings, _ = find_warnings(p.stdout + p.stderr)
         if warnings:
             raise RuntimeError("suricata warnings/errors:\n    " + "\n    ".join(warnings))
-        alerts = []
+        events = []
         eve = Path(logdir) / "eve.json"
         if eve.exists():
             for line in eve.read_text(encoding="utf-8").splitlines():
                 try:
-                    ev = json.loads(line)
+                    events.append(json.loads(line))
                 except ValueError:
                     continue
-                if ev.get("event_type") == "alert":
-                    alerts.append(ev)
-        return alerts
+        return events
+
+
+def replay_alerts(pcap, rules, variables, extra_sets=()):
+    """Replay a capture and return its eve.json alert events (all SIDs), in eve order."""
+    return [ev for ev in replay_eve(pcap, rules, variables, extra_sets) if ev.get("event_type") == "alert"]
+
+
+def lm_sids(events):
+    return {ev["alert"]["signature_id"] for ev in events
+            if ev.get("event_type") == "alert" and LM_SID_MIN <= ev["alert"]["signature_id"] <= LM_SID_MAX}
+
+
+def decode_problems(events, app_proto):
+    """Problems if the capture is not fully decoded as app_proto: every flow must be app_proto and
+    there must be no anomaly events (malformed protocol data)."""
+    flows = [ev for ev in events if ev.get("event_type") == "flow"]
+    problems = [f"flow to port {ev.get('dest_port')} decoded as {ev.get('app_proto')}"
+                for ev in flows if ev.get("app_proto") != app_proto]
+    problems += [f"anomaly {ev.get('anomaly')}" for ev in events if ev.get("event_type") == "anomaly"]
+    if not flows:
+        problems.append("no flows")
+    return problems
 
 
 def replay_counts(pcap, rules, variables, extra_sets=()):
@@ -243,7 +263,7 @@ def replay_counts(pcap, rules, variables, extra_sets=()):
 
 def replay(pcap, rules, variables):
     """Replay a capture and return the set of LM-OT SIDs that fired."""
-    return {sid for sid in replay_counts(pcap, rules, variables) if LM_SID_MIN <= sid <= LM_SID_MAX}
+    return lm_sids(replay_eve(pcap, rules, variables))
 
 
 # ---------------------------------------------------------------- tuning
@@ -418,7 +438,9 @@ def main():
             fx_vars = var_sets[fx["vars"]] if "vars" in fx else variables
             try:
                 pcap = fetch(fx)
-                got = sorted(replay(pcap, rules, fx_vars))
+                events = replay_eve(pcap, rules, fx_vars)
+                got = sorted(lm_sids(events))
+                decode = decode_problems(events, fx["app_proto"]) if "app_proto" in fx else []
             except Exception as exc:  # report and continue with the next fixture
                 print(f"  FAIL {fx['id']} expected={fx['expect']}:{expected} error={exc}")
                 failed = True
@@ -433,8 +455,11 @@ def main():
                 ok = bool(expected) and not set(expected) & set(got)
             else:
                 ok = False
+            ok = ok and not decode
             mode = "exact" if fx.get("exact") else fx["expect"]
-            print(f"  {'PASS' if ok else 'FAIL'} {fx['id']} expected={mode}:{expected} got={got}")
+            print(f"  {'PASS' if ok else 'FAIL'} {fx['id']} expected={mode}:{expected} got={got}"
+                  + (f" decoded={fx['app_proto']}" if "app_proto" in fx and not decode else "")
+                  + (f"  <- not cleanly decoded as {fx['app_proto']}: {'; '.join(decode[:3])}" if decode else ""))
             passed += ok
         print(f"{passed}/{len(fixtures)} dynamic tests passed")
         if passed != len(fixtures):

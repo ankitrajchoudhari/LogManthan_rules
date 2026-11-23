@@ -14,14 +14,14 @@
   },
   "var_sets": {
     "lab": {
-      "OT_NET": "[10.10.1.10]",
+      "OT_NET": "[10.10.1.10,10.10.1.11]",
       "OT_WRITERS": "[10.10.1.20]",
       "ENG_WS": "[10.10.1.30]",
       "DNP3_MASTERS": "[10.10.1.40]",
       "IT_NET": "[10.10.1.128/25]"
     },
     "lab_compromised_writer": {
-      "OT_NET": "[10.10.1.10]",
+      "OT_NET": "[10.10.1.10,10.10.1.11]",
       "OT_WRITERS": "[10.10.1.20,10.10.1.66]",
       "ENG_WS": "[10.10.1.30]",
       "DNP3_MASTERS": "[10.10.1.40]",
@@ -223,6 +223,66 @@
       "vars": "lab",
       "expect": "silent",
       "expect_sids": []
+    },
+    {
+      "id": "lab_dnp3_cold_restart",
+      "path": "tests/suricata/lab/lab_dnp3_cold_restart.pcap",
+      "sha256": "0ca09b40b5c1d8d84928da40ee7804e8ad7f2d570cf9713b7580a1b4fa179a9c",
+      "vars": "lab",
+      "app_proto": "dnp3",
+      "expect": "fire",
+      "expect_sids": [
+        9100010
+      ],
+      "exact": true
+    },
+    {
+      "id": "lab_dnp3_warm_restart",
+      "path": "tests/suricata/lab/lab_dnp3_warm_restart.pcap",
+      "sha256": "6180567d03fcbb7c0b6b0f4d9a596b8c71e6b4e0e27f0ccf655c741bf2c24563",
+      "vars": "lab",
+      "app_proto": "dnp3",
+      "expect": "fire",
+      "expect_sids": [
+        9100011
+      ],
+      "exact": true
+    },
+    {
+      "id": "lab_dnp3_direct_operate",
+      "path": "tests/suricata/lab/lab_dnp3_direct_operate.pcap",
+      "sha256": "91cd48a788efaa3f80e3af8600b1899a9ae0a0c716bb7a3a9f73343dc8f2a3e2",
+      "vars": "lab",
+      "app_proto": "dnp3",
+      "expect": "fire",
+      "expect_sids": [
+        9100012
+      ],
+      "exact": true
+    },
+    {
+      "id": "lab_dnp3_write",
+      "path": "tests/suricata/lab/lab_dnp3_write.pcap",
+      "sha256": "74c61f2dc66c3323e29d2ff5a8d51b94f80c8ffb04951672d0824d1cd098a277",
+      "vars": "lab",
+      "app_proto": "dnp3",
+      "expect": "fire",
+      "expect_sids": [
+        9100013
+      ],
+      "exact": true
+    },
+    {
+      "id": "lab_dnp3_disable_unsolicited",
+      "path": "tests/suricata/lab/lab_dnp3_disable_unsolicited.pcap",
+      "sha256": "c1fa4030ef674d1836809d0d67a262de1a494699b62fe29c870ec5f2c8854f37",
+      "vars": "lab",
+      "app_proto": "dnp3",
+      "expect": "fire",
+      "expect_sids": [
+        9100016
+      ],
+      "exact": true
     },
     {
       "id": "iti_modbustcp_master_allowed",
