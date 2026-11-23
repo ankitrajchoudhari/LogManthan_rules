@@ -294,6 +294,15 @@
         9100007,
         9100008
       ]
+    },
+    {
+      "id": "lab_dnp3_master_normal",
+      "path": "tests/suricata/lab/lab_dnp3_master_normal.pcap",
+      "sha256": "51635dc43b3e59dbeafa6a4fdd1c7b6021e703bf18bce0a3cacaffe6d427e05d",
+      "vars": "lab",
+      "app_proto": "dnp3",
+      "expect": "silent",
+      "expect_sids": []
     }
   ]
 }

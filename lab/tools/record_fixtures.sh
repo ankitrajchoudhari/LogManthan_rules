@@ -56,8 +56,10 @@ record_dnp3_master() {  # record_dnp3_master <seconds>
   $COMPOSE run --rm capture dnp3_master_normal "$1" "$MASTER" > /dev/null 2>&1 &
   pid=$!
   wait_capture_started
-  $COMPOSE restart dnp3-master > /dev/null 2>&1
-  echo "record: dnp3-master restarted, capturing $1 s of normal polling"
+  # Restart the outstation too: it comes back with DEVICE_RESTART set, so the capture includes
+  # the master's allowed WRITE that clears it (9100013 must stay silent for a DNP3_MASTERS host).
+  $COMPOSE restart dnp3-outstation dnp3-master > /dev/null 2>&1
+  echo "record: dnp3-outstation and dnp3-master restarted, capturing $1 s of normal polling"
   wait "$pid"
   save dnp3_master_normal
 }
