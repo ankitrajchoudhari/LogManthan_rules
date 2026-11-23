@@ -16,3 +16,4 @@ token*
 
 # Python
 __pycache__/
+.venv/
