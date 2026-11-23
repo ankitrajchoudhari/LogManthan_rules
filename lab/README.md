@@ -55,7 +55,7 @@ Check with `make alerts ARGS="--forbid-priority 1"` before running any attack.
 
 Notes:
 - `flood` is caught by the request-rate rule 9100007 (300 Modbus requests in 10 s from a host that is
-  not in `OT_WRITERS`). The HMI sends ~21 per 10 s. 9100008 (1000 in 10 s from any host, including
+  not in `OT_WRITERS`). The HMI sends ~21 per 10 s. 9100008 (2000 in 10 s from any host, including
   allowed writers) needs the heavier burst: `make attack SCENARIO="flood --count 3000"`. The first
   request on each connection is not counted, so 1000 requests over 4 connections count as 996. It uses only 4 connections, so it does not trip the connection-count
   rule 9100006 (20 SYNs in 60 s), which belongs to `scan`.

@@ -14,7 +14,7 @@ Priority: `1` = Critical (opens a case), `2` = Medium (alert only), `3` = Low.
 | 9100005 | LM-OT Modbus user-defined or reserved function code | 2 | T0855 | **none yet** |
 | 9100006 | LM-OT Modbus scan - many connections from one host | 2 | T0846 | `lab_scan` |
 | 9100007 | LM-OT Modbus request flood from unknown host (rev 2: was any host) | 2 | T0814 | `lab_flood`, `lab_flood_heavy` |
-| 9100008 | LM-OT Modbus request flood from any host (incl. allowed writers) | 2 | T0814 | `lab_flood_heavy`, `lab_flood_heavy_allowed_writer` |
+| 9100008 | LM-OT Modbus request flood from any host (incl. allowed writers) (rev 2: 2000 in 10 s, was 1000) | 2 | T0814 | `lab_flood_heavy`, `lab_flood_heavy_allowed_writer` |
 | 9100010 | LM-OT DNP3 Cold Restart command | 1 | T0816 | `dnp3_cold_restart_and_response` |
 | 9100011 | LM-OT DNP3 Warm Restart command | 1 | T0816 | `dnp3_warm_restart_and_response` |
 | 9100012 | LM-OT DNP3 Direct Operate from non-master | 1 | T0855 | `dnp3_directoperate_and_response`, `dnp3_direct_operate_analog_output` |
