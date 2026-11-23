@@ -7,7 +7,8 @@
 4. Tuning    replay with Suricata's bundled Modbus/DNP3 event rules, without and with
              tuning/threshold.config, and check event-alert volume stays within agreed limits.
 
-Standard library only. Suricata binary comes from env var SURICATA (default "suricata").
+Standard library only. Suricata binary comes from env var SURICATA (default "suricata"); the
+bundled event rules are taken from that binary's own install (`suricata --build-info`).
 External captures are downloaded to .cache/ and never committed; our own lab captures live in
 tests/suricata/lab/. Every capture is verified by SHA-256 before use.
 """
@@ -192,7 +193,7 @@ def fetch(fx):
             raise ValueError(f"SHA-256 mismatch (expected {fx['sha256']}, got {got}); refusing capture")
         return dest
     CACHE.mkdir(parents=True, exist_ok=True)
-    dest = CACHE / f"{fx['id']}.pcap"
+    dest = CACHE / f"{fx['sha256'][:16]}.pcap"  # keyed by content: fixtures sharing a capture share one download
     if not dest.exists():
         tmp = dest.with_suffix(".part")
         with urllib.request.urlopen(fx["url"], timeout=60) as r, open(tmp, "wb") as fh:
@@ -208,7 +209,11 @@ def fetch(fx):
 def replay_counts(pcap, rules, variables, extra_sets=()):
     """Replay a capture and return a Counter of alert counts per SID (all SIDs)."""
     with tempfile.TemporaryDirectory() as logdir:
-        cmd = [SURICATA, "-r", str(pcap), "-k", "none", "-S", str(rules), "-l", logdir]
+        # --runmode single: with several worker threads, packets reach threshold counters out of
+        # timestamp order, so threshold/limit rules give different counts run to run (seen on
+        # ITI ModbusTCP: 9100007 fired 5-8 times, and 9100008 sometimes fired). One thread
+        # makes every replay deterministic, which exact expectations and limits require.
+        cmd = [SURICATA, "--runmode", "single", "-r", str(pcap), "-k", "none", "-S", str(rules), "-l", logdir]
         cmd += suricata_args(variables)
         for s in extra_sets:
             cmd += ["--set", s]
@@ -237,14 +242,20 @@ def replay(pcap, rules, variables):
 
 
 # ---------------------------------------------------------------- tuning
-def bundled_rules_dir():
-    """Directory holding Suricata's bundled *-events.rules (env SURICATA_RULES_DIR overrides)."""
-    candidates = [os.environ.get("SURICATA_RULES_DIR"), "/usr/share/suricata/rules",
-                  "/usr/local/share/suricata/rules", "/etc/suricata/rules"]
-    for c in candidates:
-        if c and (Path(c) / "modbus-events.rules").exists():
-            return Path(c)
-    raise FileNotFoundError("bundled Suricata rules not found; set SURICATA_RULES_DIR")
+def suricata_build():
+    """(version, bundled rules dir) of the Suricata binary under test, from `suricata --build-info`.
+
+    The bundled *-events.rules are installed with the binary in <datarootdir>/suricata/rules, so
+    asking the binary (instead of trying fixed paths) guarantees the rule files we tune and load
+    belong to the same Suricata build that runs the test.
+    """
+    p = subprocess.run([SURICATA, "--build-info"], capture_output=True, text=True)
+    out = p.stdout + p.stderr
+    ver = re.search(r"This is Suricata version (\S+)", out)
+    root = re.search(r"^\s*--datarootdir\s+(\S+)", out, re.M)
+    if p.returncode != 0 or not ver or not root:
+        raise RuntimeError(f"cannot read version/datarootdir from `{SURICATA} --build-info`:\n{out}")
+    return ver.group(1), Path(root.group(1)) / "suricata" / "rules"
 
 
 THRESHOLD_LINE = re.compile(
@@ -286,7 +297,23 @@ def tuning_check(fixtures_data, lm_rules_text, tmpdir):
     """
     cfg = json.loads(TUNING.read_text(encoding="utf-8"))
     ev_min, ev_max = cfg["event_sid_range"]
-    rules_dir = bundled_rules_dir()
+    try:
+        version, rules_dir = suricata_build()
+    except RuntimeError as exc:
+        print(f"  FAIL {exc}")
+        return False
+    if version != cfg["suricata_version"]:
+        print(f"  FAIL Suricata under test is {version}, but the tuning was measured on "
+              f"{cfg['suricata_version']} (tests/suricata/tuning.json): bundled rule SIDs may differ. "
+              "Re-measure and update suricata_version and limits.")
+        return False
+    missing = [f for f in cfg["bundled_rule_files"] if not (rules_dir / f).is_file()]
+    if missing:
+        print(f"  FAIL bundled rule files {missing} not found in {rules_dir} "
+              f"(datarootdir of {SURICATA} {version})")
+        return False
+    # These exact files are loaded below, so every threshold SID is checked against what Suricata
+    # actually loads; Suricata's own "unknown rule" warning would also fail the replay.
     bundled = "".join((rules_dir / f).read_text(encoding="utf-8") for f in cfg["bundled_rule_files"])
     bundled_sids = {int(x) for x in re.findall(r"\bsid:\s*(\d+)\s*;", bundled)}
     threshold_file = ROOT / cfg["threshold_file"]
@@ -305,9 +332,13 @@ def tuning_check(fixtures_data, lm_rules_text, tmpdir):
     default_limit = cfg.get("default_limit", 0)
     total_before = total_after = 0
     ok_all = not problems
-    print(f"  bundled rules: {', '.join(cfg['bundled_rule_files'])} from {rules_dir}")
+    print(f"  bundled rules: {', '.join(cfg['bundled_rule_files'])} from {rules_dir} (Suricata {version})")
     print(f"  {'capture':42s} {'before':>7s} {'after':>6s} {'limit':>6s}  after per SID")
+    seen = set()
     for fx in captures:
+        if fx["sha256"] in seen:  # same capture under another var set: event volume already measured
+            continue
+        seen.add(fx["sha256"])
         fx_vars = var_sets[fx["vars"]] if "vars" in fx else fixtures_data["vars"]
         limit = limits.get(fx["id"], default_limit)
         try:
@@ -393,6 +424,8 @@ def main():
                 ok = set(expected) <= set(got)
             elif fx["expect"] == "silent":
                 ok = not got
+            elif fx["expect"] == "absent":  # none of expect_sids may fire (other LM SIDs may)
+                ok = bool(expected) and not set(expected) & set(got)
             else:
                 ok = False
             mode = "exact" if fx.get("exact") else fx["expect"]
