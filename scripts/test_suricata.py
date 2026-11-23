@@ -37,6 +37,15 @@ BASE_SETS = [
     "security.lua.allow-rules=false",
 ]
 
+# Any Suricata warning fails the tests, except the known harmless environment warnings
+# below. They come from the machine Suricata runs on, not from our rules.
+# Only add an entry together with a comment explaining why it is harmless.
+IGNORED_WARNINGS = [
+    # Suricata run as a non-root user cannot create its Hyperscan pattern cache folder.
+    # This only disables the cache; rule loading and detection are unaffected.
+    re.compile(r"mpm-hs: Failed to create Hyperscan cache folder"),
+]
+
 ACTIONS = ("alert", "drop", "reject", "rejectsrc", "rejectdst", "rejectboth", "pass")
 
 
@@ -107,13 +116,25 @@ def combined_rules(tmpdir):
     return path
 
 
+def find_warnings(output):
+    """Return (warnings, ignored) from Suricata output."""
+    warnings, ignored = [], []
+    for line in output.splitlines():
+        if re.search(r"^\s*W:|<Warning>|\bWarning:", line):
+            if any(p.search(line) for p in IGNORED_WARNINGS):
+                ignored.append(line)
+            else:
+                warnings.append(line)
+    return warnings, ignored
+
+
 def static_check(variables, tmpdir):
     rules = combined_rules(tmpdir)
     cmd = [SURICATA, "-T", "-S", str(rules), "-l", str(tmpdir)] + suricata_args(variables)
     p = subprocess.run(cmd, capture_output=True, text=True)
     out = p.stdout + p.stderr
-    warnings = [l for l in out.splitlines() if re.search(r"\bW:|<Warning>|\bWarning\b", l)]
-    return p.returncode, out, warnings, rules
+    warnings, ignored = find_warnings(out)
+    return p.returncode, out, warnings, ignored, rules
 
 
 # ---------------------------------------------------------------- dynamic
@@ -147,6 +168,9 @@ def replay(pcap, rules, variables):
         p = subprocess.run(cmd, capture_output=True, text=True)
         if p.returncode != 0:
             raise RuntimeError(f"suricata exited {p.returncode}:\n{p.stdout}{p.stderr}")
+        warnings, _ = find_warnings(p.stdout + p.stderr)
+        if warnings:
+            raise RuntimeError("suricata warnings:\n    " + "\n    ".join(warnings))
         sids = set()
         eve = Path(logdir) / "eve.json"
         if eve.exists():
@@ -180,15 +204,20 @@ def main():
     ver = subprocess.run([SURICATA, "-V"], capture_output=True, text=True)
     print("  " + (ver.stdout or ver.stderr).strip())
     with tempfile.TemporaryDirectory() as tmpdir:
-        rc, out, warnings, rules = static_check(variables, tmpdir)
+        rc, out, warnings, ignored, rules = static_check(variables, tmpdir)
+        for w in ignored:
+            print("  IGNORED (known environment warning)", w)
         for w in warnings:
             print("  WARNING", w)
         if rc != 0:
             print(out)
             print(f"  FAIL: suricata -T exited {rc}")
             failed = True
+        elif warnings:
+            print(f"  FAIL: {len(warnings)} warnings (warnings are not allowed)")
+            failed = True
         else:
-            print(f"  PASS: rules load ({len(warnings)} warnings)")
+            print(f"  PASS: rules load (0 warnings, {len(ignored)} ignored)")
 
         print("== Dynamic (pcap replay) ==")
         passed = 0

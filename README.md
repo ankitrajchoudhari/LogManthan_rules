@@ -45,12 +45,14 @@ docker run --rm -v "$PWD:/src" -w /src --entrypoint python3 jasonish/suricata:8.
 The runner:
 1. **Lint** fails if a rule lacks the `LM-OT` msg prefix, `priority`, `metadata:mitre_ics`, `sid` or `rev`;
    uses Lua; isn't an `alert`; or has a SID out of range or reused.
-2. **Static** runs `suricata -T` on all rule files.
-3. **Dynamic** downloads each capture into `.cache/`, verifies its SHA-256, replays it, and checks that
+2. **Static** runs `suricata -T` on all rule files. Any warning fails the test, except the known
+   harmless environment warnings listed (with a reason) in `IGNORED_WARNINGS` in the script.
+3. **Dynamic** downloads each capture into `.cache/`, verifies its SHA-256, replays it (again failing on any warning), and checks that
    the expected SIDs fire (or that nothing fires for `silent` fixtures).
 
 Suricata settings are passed with `--set`; there is no custom `suricata.yaml` in the repo.
-CI (`.github/workflows/test.yml`) runs gitleaks and the same tests on every push and pull request.
+CI (`.github/workflows/test.yml`) runs gitleaks, then the same tests inside the `jasonish/suricata:8.0.7`
+image pinned by digest (the production version), on every push and pull request.
 
 ## Secrets
 ```sh
