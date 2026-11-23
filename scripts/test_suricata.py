@@ -4,6 +4,8 @@
 1. Lint      every rule in suricata/**/*.rules against repo conventions.
 2. Static    `suricata -T` with all rule files concatenated.
 3. Dynamic   replay each fixture capture and check which LM SIDs fire.
+4. Tuning    replay with Suricata's bundled Modbus/DNP3 event rules, without and with
+             tuning/threshold.config, and check event-alert volume stays within agreed limits.
 
 Standard library only. Suricata binary comes from env var SURICATA (default "suricata").
 External captures are downloaded to .cache/ and never committed; our own lab captures live in
@@ -19,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -26,6 +29,7 @@ RULES_DIR = ROOT / "suricata"
 FIXTURES = ROOT / "tests" / "suricata" / "fixtures.json"
 SIDS_MD = ROOT / "SIDS.md"
 LAB_CLASSIFICATION = ROOT / "lab" / "suricata" / "classification.config"
+TUNING = ROOT / "tests" / "suricata" / "tuning.json"
 CACHE = ROOT / ".cache" / "pcaps"
 SURICATA = os.environ.get("SURICATA", "suricata")
 
@@ -143,10 +147,17 @@ def combined_rules(tmpdir):
 
 
 def find_warnings(output):
-    """Return (warnings, ignored) from Suricata output."""
+    """Return (problems, ignored) from Suricata output.
+
+    Problems are warnings and errors. Errors matter even when Suricata exits 0: for example a
+    malformed threshold.config line is reported as an error and then silently skipped.
+    Errors are never ignorable; only the IGNORED_WARNINGS list can excuse a warning.
+    """
     warnings, ignored = [], []
     for line in output.splitlines():
-        if re.search(r"^\s*W:|<Warning>|\bWarning:", line):
+        if re.search(r"^\s*E:|<Error>|\bError:", line):
+            warnings.append(line)
+        elif re.search(r"^\s*W:|<Warning>|\bWarning:", line):
             if any(p.search(line) for p in IGNORED_WARNINGS):
                 ignored.append(line)
             else:
@@ -194,17 +205,20 @@ def fetch(fx):
     return dest
 
 
-def replay(pcap, rules, variables):
+def replay_counts(pcap, rules, variables, extra_sets=()):
+    """Replay a capture and return a Counter of alert counts per SID (all SIDs)."""
     with tempfile.TemporaryDirectory() as logdir:
         cmd = [SURICATA, "-r", str(pcap), "-k", "none", "-S", str(rules), "-l", logdir]
         cmd += suricata_args(variables)
+        for s in extra_sets:
+            cmd += ["--set", s]
         p = subprocess.run(cmd, capture_output=True, text=True)
         if p.returncode != 0:
             raise RuntimeError(f"suricata exited {p.returncode}:\n{p.stdout}{p.stderr}")
         warnings, _ = find_warnings(p.stdout + p.stderr)
         if warnings:
-            raise RuntimeError("suricata warnings:\n    " + "\n    ".join(warnings))
-        sids = set()
+            raise RuntimeError("suricata warnings/errors:\n    " + "\n    ".join(warnings))
+        counts = Counter()
         eve = Path(logdir) / "eve.json"
         if eve.exists():
             for line in eve.read_text(encoding="utf-8").splitlines():
@@ -213,10 +227,117 @@ def replay(pcap, rules, variables):
                 except ValueError:
                     continue
                 if ev.get("event_type") == "alert":
-                    sid = ev["alert"]["signature_id"]
-                    if LM_SID_MIN <= sid <= LM_SID_MAX:
-                        sids.add(sid)
-        return sids
+                    counts[ev["alert"]["signature_id"]] += 1
+        return counts
+
+
+def replay(pcap, rules, variables):
+    """Replay a capture and return the set of LM-OT SIDs that fired."""
+    return {sid for sid in replay_counts(pcap, rules, variables) if LM_SID_MIN <= sid <= LM_SID_MAX}
+
+
+# ---------------------------------------------------------------- tuning
+def bundled_rules_dir():
+    """Directory holding Suricata's bundled *-events.rules (env SURICATA_RULES_DIR overrides)."""
+    candidates = [os.environ.get("SURICATA_RULES_DIR"), "/usr/share/suricata/rules",
+                  "/usr/local/share/suricata/rules", "/etc/suricata/rules"]
+    for c in candidates:
+        if c and (Path(c) / "modbus-events.rules").exists():
+            return Path(c)
+    raise FileNotFoundError("bundled Suricata rules not found; set SURICATA_RULES_DIR")
+
+
+THRESHOLD_LINE = re.compile(
+    r"^(threshold|event_filter|rate_filter|suppress)\s+gen_id\s+1\s*,\s*sig_id\s+(\d+)\s*(,[^#]*)?$"
+)
+
+
+def lint_threshold_file(path, bundled_sids):
+    """Check a threshold.config: valid lines only, no trailing comments, never an LM-OT SID,
+    and every SID must exist in the bundled rules it is meant to tune."""
+    errors, sids = [], []
+    for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        where = f"{path.relative_to(ROOT).as_posix()}:{n}"
+        m = THRESHOLD_LINE.match(s)
+        if not m:
+            errors.append(f"{where}: not a valid gen_id 1 entry, or has a trailing comment (not allowed)")
+            continue
+        sid = int(m.group(2))
+        sids.append(sid)
+        if LM_SID_MIN <= sid <= LM_SID_MAX:
+            errors.append(f"{where}: sid {sid} is an LM-OT rule; tuning must not touch our rules")
+        elif sid not in bundled_sids:
+            errors.append(f"{where}: sid {sid} is not in the bundled rule files")
+    dup = {s for s in sids if sids.count(s) > 1}
+    if dup:
+        errors.append(f"{path.relative_to(ROOT).as_posix()}: duplicate entries for {sorted(dup)}")
+    return errors
+
+
+def tuning_check(fixtures_data, lm_rules_text, tmpdir):
+    """Replay every capture with the bundled event rules, without and with tuning/threshold.config.
+
+    Fails if: the tuning file is invalid; any capture's event-alert count after tuning exceeds its
+    agreed limit; an event SID that fired before tuning is silenced completely (we rate-limit,
+    we don't disable); or the LM-OT SIDs that fire change at all.
+    """
+    cfg = json.loads(TUNING.read_text(encoding="utf-8"))
+    ev_min, ev_max = cfg["event_sid_range"]
+    rules_dir = bundled_rules_dir()
+    bundled = "".join((rules_dir / f).read_text(encoding="utf-8") for f in cfg["bundled_rule_files"])
+    bundled_sids = {int(x) for x in re.findall(r"\bsid:\s*(\d+)\s*;", bundled)}
+    threshold_file = ROOT / cfg["threshold_file"]
+
+    problems = lint_threshold_file(threshold_file, bundled_sids)
+    for p in problems:
+        print("  LINT FAIL", p)
+    rules = Path(tmpdir) / "with-events.rules"
+    rules.write_text(lm_rules_text + "\n" + bundled, encoding="utf-8")
+    empty = Path(tmpdir) / "empty-threshold.config"
+    empty.write_text("", encoding="utf-8")
+
+    var_sets = fixtures_data.get("var_sets", {})
+    captures = cfg.get("extra_captures", []) + fixtures_data["fixtures"]
+    limits = cfg["limits"]
+    default_limit = cfg.get("default_limit", 0)
+    total_before = total_after = 0
+    ok_all = not problems
+    print(f"  bundled rules: {', '.join(cfg['bundled_rule_files'])} from {rules_dir}")
+    print(f"  {'capture':42s} {'before':>7s} {'after':>6s} {'limit':>6s}  after per SID")
+    for fx in captures:
+        fx_vars = var_sets[fx["vars"]] if "vars" in fx else fixtures_data["vars"]
+        limit = limits.get(fx["id"], default_limit)
+        try:
+            pcap = fetch(fx)
+            before = replay_counts(pcap, rules, fx_vars, [f"threshold-file={empty}"])
+            after = replay_counts(pcap, rules, fx_vars, [f"threshold-file={threshold_file}"])
+        except Exception as exc:
+            print(f"  FAIL {fx['id']} error={exc}")
+            ok_all = False
+            continue
+        ev_b = {s: n for s, n in before.items() if ev_min <= s <= ev_max}
+        ev_a = {s: n for s, n in after.items() if ev_min <= s <= ev_max}
+        lm_b = {s for s in before if LM_SID_MIN <= s <= LM_SID_MAX}
+        lm_a = {s for s in after if LM_SID_MIN <= s <= LM_SID_MAX}
+        nb, na = sum(ev_b.values()), sum(ev_a.values())
+        total_before += nb
+        total_after += na
+        why = []
+        if na > limit:
+            why.append(f"{na} event alerts > limit {limit}")
+        if set(ev_b) != set(ev_a):
+            why.append(f"silenced {sorted(set(ev_b) - set(ev_a))}")
+        if lm_b != lm_a:
+            why.append(f"LM-OT SIDs changed {sorted(lm_b)} -> {sorted(lm_a)}")
+        ok_all &= not why
+        per_sid = " ".join(f"{s}:{n}" for s, n in sorted(ev_a.items())) or "-"
+        print(f"  {'PASS' if not why else 'FAIL'} {fx['id']:37s} {nb:7d} {na:6d} {limit:6d}  {per_sid}"
+              + (f"  <- {'; '.join(why)}" if why else ""))
+    print(f"  total event alerts: {total_before} before -> {total_after} after tuning")
+    return ok_all
 
 
 def main():
@@ -248,7 +369,7 @@ def main():
             print(f"  FAIL: suricata -T exited {rc}")
             failed = True
         elif warnings:
-            print(f"  FAIL: {len(warnings)} warnings (warnings are not allowed)")
+            print(f"  FAIL: {len(warnings)} warnings/errors (none are allowed)")
             failed = True
         else:
             print(f"  PASS: rules load (0 warnings, {len(ignored)} ignored)")
@@ -279,6 +400,13 @@ def main():
             passed += ok
         print(f"{passed}/{len(fixtures)} dynamic tests passed")
         if passed != len(fixtures):
+            failed = True
+
+        print("== Tuning (bundled Modbus/DNP3 event rules + tuning/threshold.config) ==")
+        if tuning_check(data, Path(rules).read_text(encoding="utf-8"), tmpdir):
+            print("  PASS: event-alert volume within limits, nothing silenced, LM-OT SIDs unchanged")
+        else:
+            print("  FAIL: tuning check")
             failed = True
 
     sys.exit(1 if failed else 0)

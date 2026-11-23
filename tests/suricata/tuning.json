@@ -1,0 +1,20 @@
+{
+  "description": "Event-alert volume for Suricata's bundled Modbus/DNP3 event rules, before and after tuning/threshold.config. Every fixture in fixtures.json is replayed too; captures not listed in limits must stay at default_limit.",
+  "bundled_rule_files": ["modbus-events.rules", "dnp3-events.rules"],
+  "event_sid_range": [2250000, 2279999],
+  "threshold_file": "tuning/threshold.config",
+  "extra_captures": [
+    {
+      "id": "iti_modbustcp",
+      "url": "https://raw.githubusercontent.com/ITI/ICS-Security-Tools/master/pcaps/ModbusTCP/ModbusTCP.pcap",
+      "sha256": "ae5e7b3101bd2f49390cfd77376ed176389aba9360307dd424dab51b339c5593"
+    }
+  ],
+  "limits": {
+    "iti_modbustcp": 19,
+    "bro_modbus_modbus": 3,
+    "lab_flood": 1,
+    "lab_hmi_normal": 1
+  },
+  "default_limit": 0
+}
