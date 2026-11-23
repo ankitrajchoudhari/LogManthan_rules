@@ -1,7 +1,8 @@
 """Shared helpers for the OT lab: lab-network safety check and minimal Modbus/TCP framing.
 
 Every socket the lab opens goes through check_target(), which refuses anything outside
-the lab network 10.10.1.0/24. Standard library only.
+the lab network 10.10.1.0/24, and also its network address, gateway and broadcast address
+(the gateway is the Docker host side of the bridge, not a lab device). Standard library only.
 """
 
 import ipaddress
@@ -10,18 +11,34 @@ import struct
 import sys
 
 LAB_NET = ipaddress.ip_network("10.10.1.0/24")
+LAB_GATEWAY = ipaddress.ip_address("10.10.1.1")
+EXCLUDED = {LAB_NET.network_address, LAB_GATEWAY, LAB_NET.broadcast_address}
+
+
+def is_allowed(ip):
+    ip = ipaddress.ip_address(ip)
+    return ip in LAB_NET and ip not in EXCLUDED
+
+
+def lab_hosts():
+    """Every address a lab script may target (the /24 minus network, gateway and broadcast)."""
+    return [str(h) for h in LAB_NET.hosts() if is_allowed(h)]
 
 
 def check_target(host):
-    """Resolve host and return its IP. Exit if any resolved address is outside LAB_NET."""
+    """Resolve host and return its IP. Exit unless every resolved address is an allowed lab address."""
     try:
         infos = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
     except socket.gaierror as exc:
         sys.exit(f"REFUSED: cannot resolve {host!r}: {exc}")
     addrs = {ipaddress.ip_address(i[4][0]) for i in infos}
-    bad = [str(a) for a in addrs if a not in LAB_NET]
-    if bad or not addrs:
-        sys.exit(f"REFUSED: target {host!r} -> {bad or 'nothing'} is outside the lab network {LAB_NET}")
+    if not addrs:
+        sys.exit(f"REFUSED: {host!r} resolved to nothing")
+    for a in addrs:
+        if a not in LAB_NET:
+            sys.exit(f"REFUSED: target {host!r} -> {a} is outside the lab network {LAB_NET}")
+        if a in EXCLUDED:
+            sys.exit(f"REFUSED: target {host!r} -> {a} is the lab network, gateway or broadcast address")
     return str(next(iter(addrs)))
 
 

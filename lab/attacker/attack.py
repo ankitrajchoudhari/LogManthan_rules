@@ -1,14 +1,14 @@
 """Lab attacker: generates malicious Modbus traffic for detection testing.
 
-LAB USE ONLY. Every target is checked against 10.10.1.0/24 before anything is sent
-(labnet.check_target); anything else is refused and the script exits.
+LAB USE ONLY. Every target is checked before anything is sent (labnet.check_target): it must be
+in 10.10.1.0/24 and not the network, gateway or broadcast address; anything else is refused.
 
 Scenarios and the LM SID each one should raise:
-  scan           connect sweep of the lab /24 on 502, then FC43 probes   -> 9100006, 9100004
+  scan           connect sweep of lab hosts on 502, then FC43 probes      -> 9100006, 9100004
   write          unauthorised FC6 + FC16 writes                          -> 9100001
   listen-only    FC8 sub 4 Force Listen Only Mode                        -> 9100002
   restart-comms  FC8 sub 1 Restart Communications                        -> 9100003
-  flood          burst of new connections each sending a read            -> 9100006
+  flood          1000 FC3 reads in a burst over 4 connections             -> 9100007
 """
 
 import argparse
@@ -23,8 +23,8 @@ def log(msg):
 
 
 def scan(target, args):
-    # 1. Connect sweep of the whole lab network on 502 (every address is inside LAB_NET).
-    hosts = [str(h) for h in labnet.LAB_NET.hosts()]
+    # 1. Connect sweep of the lab hosts on 502 (network, gateway and broadcast are skipped).
+    hosts = labnet.lab_hosts()
 
     def probe(ip):
         try:
@@ -77,20 +77,24 @@ def restart_comms(target, args):
 
 
 def flood(target, args):
-    ok = 0
+    # Request flood: many reads on a few connections (few SYNs, so this is not a connection scan).
+    per_conn = max(1, args.count // args.conns)
 
-    def one(_):
+    def worker(_):
+        done = 0
         try:
-            c = labnet.ModbusClient(target, timeout=1.0)
-            c.request(labnet.read_holding(0, 10))
+            c = labnet.ModbusClient(target, timeout=2.0)
+            for _ in range(per_conn):
+                c.request(labnet.read_holding(0, 10))
+                done += 1
             c.close()
-            return 1
-        except (OSError, ConnectionError):
-            return 0
+        except (OSError, ConnectionError) as exc:
+            log(f"flood connection ended early: {exc}")
+        return done
 
-    with ThreadPoolExecutor(max_workers=16) as pool:
-        ok = sum(pool.map(one, range(args.count)))
-    log(f"flood: {args.count} connections, {ok} answered")
+    with ThreadPoolExecutor(max_workers=args.conns) as pool:
+        ok = sum(pool.map(worker, range(args.conns)))
+    log(f"flood: {ok} of {per_conn * args.conns} requests answered over {args.conns} connections")
 
 
 SCENARIOS = {
@@ -98,15 +102,16 @@ SCENARIOS = {
     "write": (write, 0),
     "listen-only": (listen_only, 0),
     "restart-comms": (restart_comms, 0),
-    "flood": (flood, 300),
+    "flood": (flood, 1000),
 }
 
 
 def main():
     p = argparse.ArgumentParser(description="OT lab attack traffic generator (lab network only)")
     p.add_argument("scenario", choices=sorted(SCENARIOS))
-    p.add_argument("--target", default="10.10.1.10", help="PLC address (must be in 10.10.1.0/24)")
-    p.add_argument("--count", type=int, default=None, help="probes (scan) or connections (flood)")
+    p.add_argument("--target", default="10.10.1.10", help="PLC address (lab hosts in 10.10.1.0/24 only)")
+    p.add_argument("--count", type=int, default=None, help="probes (scan) or total requests (flood)")
+    p.add_argument("--conns", type=int, default=4, help="connections used by flood")
     args = p.parse_args()
 
     target = labnet.check_target(args.target)  # hard stop before any traffic
