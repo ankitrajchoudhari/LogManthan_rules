@@ -1,0 +1,1 @@
+{"dest_ip": "10.10.1.11", "dest_port": 20000, "msg": "LM-OT DNP3 Write from non-master", "signature_id": 9100013, "src_ip": "10.10.1.66", "src_port": 33324, "timestamp": "2026-11-23T13:27:18.839410+0000"}

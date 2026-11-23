@@ -1,0 +1,1 @@
+{"dest_ip": "10.10.1.11", "dest_port": 20000, "msg": "LM-OT DNP3 Cold Restart command", "signature_id": 9100010, "src_ip": "10.10.1.66", "src_port": 39120, "timestamp": "2026-11-23T13:26:21.124017+0000"}

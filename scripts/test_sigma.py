@@ -175,11 +175,9 @@ def load_events(name):
 def build_stream(scenario, base_time):
     stream = []
     for seg in scenario["segments"]:
-        events = load_events(seg["capture"])
-        if not events:
-            raise Unsupported(f"{scenario['id']}: {seg['capture']} has no alerts")
+        events = load_events(seg["capture"])  # a missing file fails; an empty one is a clean baseline
         shift = timedelta(0)
-        if "at" in seg:
+        if "at" in seg and events:
             shift = base_time + timedelta(seconds=seg["at"]) - events[0]["_t"]
         for ev in events:
             ev = dict(ev)

@@ -25,25 +25,38 @@
     {
       "id": "hmi_baseline_with_floods",
       "description": "HMI baseline plus both floods: priority 2 alerts and bundled event alerts must not count.",
-      "segments": [{"capture": "lab_hmi_normal"}, {"capture": "lab_flood"}, {"capture": "lab_flood_heavy"}],
+      "segments": [
+        {"capture": "lab_hmi_normal"},
+        {"capture": "lab_flood"},
+        {"capture": "lab_flood_heavy"}
+      ],
       "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
     },
     {
       "id": "recon_then_write_9min",
       "description": "Scan, then the write 9 minutes later: inside the 10 minute window.",
-      "segments": [{"capture": "lab_scan", "at": 0}, {"capture": "lab_write", "at": 540}],
+      "segments": [
+        {"capture": "lab_scan", "at": 0},
+        {"capture": "lab_write", "at": 540}
+      ],
       "expect": {"lm_ot_recon_then_write": ["10.10.1.66"], "lm_ot_priority1_burst": []}
     },
     {
       "id": "recon_then_write_11min",
       "description": "Scan, then the write 11 minutes later: outside the 10 minute window.",
-      "segments": [{"capture": "lab_scan", "at": 0}, {"capture": "lab_write", "at": 660}],
+      "segments": [
+        {"capture": "lab_scan", "at": 0},
+        {"capture": "lab_write", "at": 660}
+      ],
       "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
     },
     {
       "id": "write_then_recon",
       "description": "Write first, scan 1 minute later: wrong order, temporal_ordered must not fire.",
-      "segments": [{"capture": "lab_write", "at": 0}, {"capture": "lab_scan", "at": 60}],
+      "segments": [
+        {"capture": "lab_write", "at": 0},
+        {"capture": "lab_scan", "at": 60}
+      ],
       "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
     },
     {
@@ -58,7 +71,10 @@
     {
       "id": "priority1_exactly_3_in_1min",
       "description": "Two unauthorised writes and Force Listen Only 1 minute later: exactly 3 priority 1 alerts.",
-      "segments": [{"capture": "lab_write", "at": 0}, {"capture": "lab_listen_only", "at": 60}],
+      "segments": [
+        {"capture": "lab_write", "at": 0},
+        {"capture": "lab_listen_only", "at": 60}
+      ],
       "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": ["10.10.1.66"]}
     },
     {
@@ -86,6 +102,71 @@
         {"capture": "lab_restart_comms", "at": 620}
       ],
       "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
+    },
+    {
+      "id": "dnp3_attack_timeline",
+      "description": "The five DNP3 attack captures at their real times (about 2 minutes apart in total) plus the master baseline: 5 Critical alerts from the attacker, nothing from the master.",
+      "segments": [
+        {"capture": "lab_dnp3_cold_restart"},
+        {"capture": "lab_dnp3_warm_restart"},
+        {"capture": "lab_dnp3_direct_operate"},
+        {"capture": "lab_dnp3_write"},
+        {"capture": "lab_dnp3_disable_unsolicited"},
+        {"capture": "lab_dnp3_master_normal"}
+      ],
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": ["10.10.1.66"]}
+    },
+    {
+      "id": "dnp3_master_baseline",
+      "description": "10 minutes of normal DNP3 master polling, including its allowed WRITE.",
+      "segments": [{"capture": "lab_dnp3_master_normal"}],
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
+    },
+    {
+      "id": "dnp3_master_and_hmi_baselines",
+      "description": "Both baselines together: normal DNP3 master and Modbus HMI traffic.",
+      "segments": [
+        {"capture": "lab_dnp3_master_normal", "at": 0},
+        {"capture": "lab_hmi_normal", "at": 30}
+      ],
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
+    },
+    {
+      "id": "modbus_scan_then_dnp3_direct_operate",
+      "description": "Modbus scan, then a DNP3 Direct Operate from the same host 2 minutes later: recon then control across protocols.",
+      "segments": [
+        {"capture": "lab_scan", "at": 0},
+        {"capture": "lab_dnp3_direct_operate", "at": 120}
+      ],
+      "expect": {"lm_ot_recon_then_write": ["10.10.1.66"], "lm_ot_priority1_burst": []}
+    },
+    {
+      "id": "dnp3_write_then_modbus_scan",
+      "description": "DNP3 Write first, Modbus scan 1 minute later: wrong order.",
+      "segments": [
+        {"capture": "lab_dnp3_write", "at": 0},
+        {"capture": "lab_scan", "at": 60}
+      ],
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
+    },
+    {
+      "id": "dnp3_two_restarts",
+      "description": "Cold and warm restart 1 minute apart: 2 Critical alerts, below 3.",
+      "segments": [
+        {"capture": "lab_dnp3_cold_restart", "at": 0},
+        {"capture": "lab_dnp3_warm_restart", "at": 60}
+      ],
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
+    },
+    {
+      "id": "dnp3_restarts_then_disable_unsolicited",
+      "description": "Cold restart, warm restart, then Disable Unsolicited within 2 minutes: 3 Critical alerts.",
+      "segments": [
+        {"capture": "lab_dnp3_cold_restart", "at": 0},
+        {"capture": "lab_dnp3_warm_restart", "at": 60},
+        {"capture": "lab_dnp3_disable_unsolicited", "at": 120}
+      ],
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": ["10.10.1.66"]}
     }
   ]
 }
