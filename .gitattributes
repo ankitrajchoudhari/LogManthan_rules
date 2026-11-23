@@ -1,0 +1,4 @@
+# Keep LF everywhere so rules and scripts behave the same on Windows, Linux and in containers.
+* text=auto eol=lf
+*.pcap binary
+*.pcapng binary
