@@ -206,8 +206,8 @@ def fetch(fx):
     return dest
 
 
-def replay_counts(pcap, rules, variables, extra_sets=()):
-    """Replay a capture and return a Counter of alert counts per SID (all SIDs)."""
+def replay_alerts(pcap, rules, variables, extra_sets=()):
+    """Replay a capture and return its eve.json alert events (all SIDs), in eve order."""
     with tempfile.TemporaryDirectory() as logdir:
         # --runmode single: with several worker threads, packets reach threshold counters out of
         # timestamp order, so threshold/limit rules give different counts run to run (seen on
@@ -223,7 +223,7 @@ def replay_counts(pcap, rules, variables, extra_sets=()):
         warnings, _ = find_warnings(p.stdout + p.stderr)
         if warnings:
             raise RuntimeError("suricata warnings/errors:\n    " + "\n    ".join(warnings))
-        counts = Counter()
+        alerts = []
         eve = Path(logdir) / "eve.json"
         if eve.exists():
             for line in eve.read_text(encoding="utf-8").splitlines():
@@ -232,8 +232,13 @@ def replay_counts(pcap, rules, variables, extra_sets=()):
                 except ValueError:
                     continue
                 if ev.get("event_type") == "alert":
-                    counts[ev["alert"]["signature_id"]] += 1
-        return counts
+                    alerts.append(ev)
+        return alerts
+
+
+def replay_counts(pcap, rules, variables, extra_sets=()):
+    """Replay a capture and return a Counter of alert counts per SID (all SIDs)."""
+    return Counter(ev["alert"]["signature_id"] for ev in replay_alerts(pcap, rules, variables, extra_sets))
 
 
 def replay(pcap, rules, variables):
