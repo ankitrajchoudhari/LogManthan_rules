@@ -37,7 +37,7 @@ jobs:
           sudo chmod -R o+rX /etc/suricata
           # Let the test user write the Hyperscan cache (otherwise suricata -T prints a warning).
           sudo mkdir -p /var/lib/suricata/cache/sgh
-          sudo chown -R "$(id -u):$(id -g)" /var/lib/suricata/cache
+          sudo chown -R "$(id -u):$(id -g)" /var/lib/suricata
           suricata -V
 
       - name: Lint + static + dynamic tests
