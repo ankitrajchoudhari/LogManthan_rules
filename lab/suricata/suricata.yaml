@@ -1,0 +1,83 @@
+%YAML 1.1
+---
+# Minimal Suricata 8 config for the lab sensor only (the test runner uses Suricata's default
+# config with --set overrides, like production). Mounted read-only from the repo, so the sensor
+# does not need to read the image's own root-unreadable /etc/suricata files.
+
+vars:
+  address-groups:
+    HOME_NET: "[10.10.1.0/24]"
+    EXTERNAL_NET: "!$HOME_NET"
+    OT_NET: "[10.10.1.10]"          # plc-modbus
+    OT_WRITERS: "[10.10.1.20]"      # hmi
+    ENG_WS: "[10.10.1.30]"          # engineering workstation slot (unused)
+    DNP3_MASTERS: "[10.10.1.40]"    # DNP3 master slot (phase 6)
+    IT_NET: "[10.10.1.128/25]"      # IT network slot (unused)
+  port-groups: {}
+
+default-log-dir: /var/log/suricata
+classification-file: /etc/suricata/lab/classification.config
+reference-config-file: /etc/suricata/lab/reference.config
+threshold-file: /etc/suricata/lab/threshold.config
+
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: eve.json
+      types:
+        - alert
+        - flow
+        - stats:
+            totals: yes
+            threads: no
+
+stats:
+  enabled: yes
+  interval: 8
+
+logging:
+  default-log-level: notice
+  outputs:
+    - console:
+        enabled: yes
+
+# Don't try to change NIC offload settings: that needs NET_ADMIN, which the sensor doesn't have.
+# Harmless on the virtual bridge (checksums are ignored with -k none, and the TCP stream engine
+# reassembles merged segments).
+capture:
+  disable-offloading: false
+
+af-packet:
+  - interface: otlab0
+    cluster-id: 99
+    cluster-type: cluster_flow
+    defrag: yes
+
+app-layer:
+  protocols:
+    modbus:
+      enabled: yes
+      detection-ports:
+        dp: 502
+    dnp3:
+      enabled: yes
+      detection-ports:
+        dp: 20000
+    enip:
+      enabled: yes
+      detection-ports:
+        dp: 44818
+        sp: 44818
+
+stream:
+  midstream: true
+  reassembly:
+    depth: 0           # long-lived Modbus sessions
+
+security:
+  lua:
+    allow-rules: false
+
+unix-command:
+  enabled: no

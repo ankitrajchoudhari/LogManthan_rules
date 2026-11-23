@@ -9,6 +9,8 @@ networks:
     driver: bridge
     driver_opts:
       com.docker.network.bridge.name: otlab0   # the sensor sniffs this bridge
+      # No IP on the bridge: the Docker host is not reachable from the lab at the gateway address.
+      com.docker.network.bridge.inhibit_ipv4: "true"
     ipam:
       config:
         - subnet: 10.10.1.0/24
@@ -55,17 +57,15 @@ services:
     network_mode: host
     read_only: true
     cap_drop: [ALL]
-    # NET_ADMIN/NET_RAW: packet capture. DAC_READ_SEARCH: read the image's root-unreadable
-    # (mode 0600, owner suricata) suricata.yaml; it grants read access only, not write.
-    cap_add: [NET_ADMIN, NET_RAW, DAC_READ_SEARCH]
+    cap_add: [NET_RAW]
     security_opt: ["no-new-privileges:true"]
     tmpfs: [/tmp, /var/run/suricata, /var/lib/suricata]
-    entrypoint: ["/bin/sh", "/lab/run.sh"]
+    entrypoint: ["/bin/sh", "/etc/suricata/lab/run.sh"]
     environment:
       LAB_IFACE: otlab0
     volumes:
       - ../suricata:/etc/suricata/lm-rules:ro
-      - ./suricata/run.sh:/lab/run.sh:ro
+      - ./suricata:/etc/suricata/lab:ro      # minimal suricata.yaml + run.sh
       - ./out:/var/log/suricata
     depends_on: [plc-modbus]
 
@@ -76,8 +76,13 @@ services:
     network_mode: host
     read_only: true
     cap_drop: [ALL]
-    cap_add: [NET_ADMIN, NET_RAW]
+    # NET_RAW: capture. SETUID/SETGID/CHOWN: tcpdump -Z hands its output file to the "tcpdump"
+    # user and then drops root. KILL: lets `timeout` (root) stop the now non-root tcpdump; it only
+    # reaches processes in this container's own PID namespace.
+    # No NET_ADMIN: -p keeps the interface out of promiscuous mode.
+    cap_add: [NET_RAW, SETUID, SETGID, CHOWN, KILL]
     security_opt: ["no-new-privileges:true"]
+    tmpfs: [/tmp]
     environment:
       LAB_IFACE: otlab0
     volumes:
