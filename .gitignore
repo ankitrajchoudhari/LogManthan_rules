@@ -1,0 +1,18 @@
+# Captures: third-party pcaps are downloaded at test time, never committed.
+*.pcap
+*.pcapng
+# Our own small lab captures are the only exception (phase 3).
+!tests/suricata/lab/*.pcap
+
+# Download cache and lab output
+.cache/
+lab/out/
+
+# Secrets
+.env
+*.key
+*.pem
+token*
+
+# Python
+__pycache__/
