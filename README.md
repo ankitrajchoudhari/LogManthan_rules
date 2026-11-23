@@ -15,6 +15,7 @@ LogManthan ingests **Suricata alerts only**, so all OT protocol detection is don
 | `scripts/test_suricata.py` | Lint + `suricata -T` + pcap replay tests |
 | `lab/` | Docker OT lab: Modbus PLC, HMI, attacker, Suricata sensor ([lab/README.md](lab/README.md)) |
 | `Makefile` | `make test`, `make lab-up`, `make attack SCENARIO=...`, `make alerts`, `make capture` |
+| `tuning/` | Rate limits for Suricata's bundled Modbus/DNP3 event rules, for LogManthan ([tuning/README.md](tuning/README.md)) |
 | `SIDS.md` | SID registry |
 | `ATTRIBUTION.md` | Credits for third-party captures |
 | `SECURITY.md` | Reporting issues, what must never be committed |
@@ -54,6 +55,13 @@ The runner:
 3. **Dynamic** verifies each capture's SHA-256 (external ones are downloaded into `.cache/` first), replays
    it (again failing on any warning), and checks that the expected SIDs fire, or that nothing fires for
    `silent` fixtures. Fixtures marked `exact` fail if any other LM SID fires too.
+
+4. **Tuning** replays every capture (plus ITI `ModbusTCP.pcap`) with Suricata's bundled
+   `modbus-events.rules` and `dnp3-events.rules`, without and with `tuning/threshold.config`. It fails if
+   a capture's event-alert count goes above its limit in `tests/suricata/tuning.json`, if an event is
+   silenced completely, or if the LM-OT SIDs change.
+
+Any Suricata warning or error line fails the run, even if Suricata exits 0.
 
 Fixture fields: `id`, `url` (external, downloaded) or `path` (in the repo), `sha256`,
 `expect` (`fire` / `silent`), `expect_sids`, optional `exact: true`, and optional `vars` naming a set in
