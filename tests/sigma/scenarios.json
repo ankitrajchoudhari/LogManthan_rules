@@ -1,0 +1,91 @@
+{
+  "description": "Alert streams for testing the Sigma correlations. Each scenario joins event files from tests/sigma/events/ (built from our lab captures by scripts/build_sigma_events.py). A segment without 'at' keeps the capture's real timestamps; with 'at' it is shifted so its first alert lands 'at' seconds after base_time (timing inside the capture is kept). 'rewrite_src' replaces source addresses, to play the same alerts from another lab host. 'expect' lists, for EVERY correlation rule, the src_ip values it must fire for; an empty list means it must not fire.",
+  "base_time": "2026-11-23T08:00:00.000000+0000",
+  "scenarios": [
+    {
+      "id": "lab_timeline",
+      "description": "All lab captures at their real times: scan, then write 27 s later, then listen-only and restart-comms, floods, and normal HMI traffic.",
+      "segments": [
+        {"capture": "lab_scan"},
+        {"capture": "lab_write"},
+        {"capture": "lab_listen_only"},
+        {"capture": "lab_restart_comms"},
+        {"capture": "lab_flood"},
+        {"capture": "lab_flood_heavy"},
+        {"capture": "lab_hmi_normal"}
+      ],
+      "expect": {"lm_ot_recon_then_write": ["10.10.1.66"], "lm_ot_priority1_burst": ["10.10.1.66"]}
+    },
+    {
+      "id": "hmi_baseline",
+      "description": "Normal HMI polling and allowed writes only.",
+      "segments": [{"capture": "lab_hmi_normal"}],
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
+    },
+    {
+      "id": "hmi_baseline_with_floods",
+      "description": "HMI baseline plus both floods: priority 2 alerts and bundled event alerts must not count.",
+      "segments": [{"capture": "lab_hmi_normal"}, {"capture": "lab_flood"}, {"capture": "lab_flood_heavy"}],
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
+    },
+    {
+      "id": "recon_then_write_9min",
+      "description": "Scan, then the write 9 minutes later: inside the 10 minute window.",
+      "segments": [{"capture": "lab_scan", "at": 0}, {"capture": "lab_write", "at": 540}],
+      "expect": {"lm_ot_recon_then_write": ["10.10.1.66"], "lm_ot_priority1_burst": []}
+    },
+    {
+      "id": "recon_then_write_11min",
+      "description": "Scan, then the write 11 minutes later: outside the 10 minute window.",
+      "segments": [{"capture": "lab_scan", "at": 0}, {"capture": "lab_write", "at": 660}],
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
+    },
+    {
+      "id": "write_then_recon",
+      "description": "Write first, scan 1 minute later: wrong order, temporal_ordered must not fire.",
+      "segments": [{"capture": "lab_write", "at": 0}, {"capture": "lab_scan", "at": 60}],
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
+    },
+    {
+      "id": "recon_and_write_from_different_hosts",
+      "description": "Scan from 10.10.1.66, write 1 minute later from 10.10.1.67: different sources must not correlate.",
+      "segments": [
+        {"capture": "lab_scan", "at": 0},
+        {"capture": "lab_write", "at": 60, "rewrite_src": {"10.10.1.66": "10.10.1.67"}}
+      ],
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
+    },
+    {
+      "id": "priority1_exactly_3_in_1min",
+      "description": "Two unauthorised writes and Force Listen Only 1 minute later: exactly 3 priority 1 alerts.",
+      "segments": [{"capture": "lab_write", "at": 0}, {"capture": "lab_listen_only", "at": 60}],
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": ["10.10.1.66"]}
+    },
+    {
+      "id": "priority1_4_in_4min",
+      "description": "Writes, listen-only after 2 minutes, restart-comms after 4 minutes: 4 priority 1 alerts in 4 minutes.",
+      "segments": [
+        {"capture": "lab_write", "at": 0},
+        {"capture": "lab_listen_only", "at": 120},
+        {"capture": "lab_restart_comms", "at": 240}
+      ],
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": ["10.10.1.66"]}
+    },
+    {
+      "id": "priority1_only_2",
+      "description": "The two unauthorised writes alone: 2 priority 1 alerts, below the threshold of 3.",
+      "segments": [{"capture": "lab_write", "at": 0}],
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
+    },
+    {
+      "id": "priority1_spread_over_10min",
+      "description": "The same 4 priority 1 alerts spread out (0, 310 s, 620 s): never 3 in any 5 minutes.",
+      "segments": [
+        {"capture": "lab_write", "at": 0},
+        {"capture": "lab_listen_only", "at": 310},
+        {"capture": "lab_restart_comms", "at": 620}
+      ],
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
+    }
+  ]
+}
