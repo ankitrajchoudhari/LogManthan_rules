@@ -1,0 +1,1 @@
+{"dest_ip": "10.10.1.20", "dest_port": 60640, "msg": "SURICATA Modbus Data mismatch", "signature_id": 2250008, "src_ip": "10.10.1.10", "src_port": 502, "timestamp": "2026-11-23T07:01:57.692360+0000"}

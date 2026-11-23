@@ -1,0 +1,2 @@
+{"dest_ip": "10.10.1.10", "dest_port": 502, "msg": "LM-OT Modbus write from unauthorised host", "signature_id": 9100001, "src_ip": "10.10.1.66", "src_port": 49206, "timestamp": "2026-11-23T07:00:56.948478+0000"}
+{"dest_ip": "10.10.1.10", "dest_port": 502, "msg": "LM-OT Modbus write from unauthorised host", "signature_id": 9100001, "src_ip": "10.10.1.66", "src_port": 49206, "timestamp": "2026-11-23T07:00:56.949293+0000"}
