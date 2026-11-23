@@ -10,7 +10,8 @@ LogManthan ingests **Suricata alerts only**, so all OT protocol detection is don
 | Path | What |
 |---|---|
 | `suricata/ot/lm-ot.rules` | OT signatures: Modbus, DNP3, EtherNet/IP, S7comm, IT→OT |
-| `tests/suricata/fixtures.json` | Test captures: URL + SHA-256 + expected SIDs |
+| `tests/suricata/fixtures.json` | Test captures: URL or repo path + SHA-256 + expected SIDs |
+| `tests/suricata/lab/` | Our own small lab captures (one per attack scenario + normal HMI traffic) |
 | `scripts/test_suricata.py` | Lint + `suricata -T` + pcap replay tests |
 | `lab/` | Docker OT lab: Modbus PLC, HMI, attacker, Suricata sensor ([lab/README.md](lab/README.md)) |
 | `Makefile` | `make test`, `make lab-up`, `make attack SCENARIO=...`, `make alerts`, `make capture` |
@@ -45,12 +46,18 @@ make test
 ```
 
 The runner:
-1. **Lint** fails if a rule lacks the `LM-OT` msg prefix, `priority`, `metadata:mitre_ics`, `sid` or `rev`;
-   uses Lua; isn't an `alert`; or has a SID out of range or reused.
+1. **Lint** fails if a rule lacks the `LM-OT` msg prefix, `classtype`, `priority`, `metadata:mitre_ics`,
+   `sid` or `rev`; uses Lua; isn't an `alert`; has a SID out of range, reused, or missing from `SIDS.md`;
+   or uses a classtype the lab sensor does not define (`lab/suricata/classification.config`).
 2. **Static** runs `suricata -T` on all rule files. Any warning fails the test, except the known
    harmless environment warnings listed (with a reason) in `IGNORED_WARNINGS` in the script.
-3. **Dynamic** downloads each capture into `.cache/`, verifies its SHA-256, replays it (again failing on any warning), and checks that
-   the expected SIDs fire (or that nothing fires for `silent` fixtures).
+3. **Dynamic** verifies each capture's SHA-256 (external ones are downloaded into `.cache/` first), replays
+   it (again failing on any warning), and checks that the expected SIDs fire, or that nothing fires for
+   `silent` fixtures. Fixtures marked `exact` fail if any other LM SID fires too.
+
+Fixture fields: `id`, `url` (external, downloaded) or `path` (in the repo), `sha256`,
+`expect` (`fire` / `silent`), `expect_sids`, optional `exact: true`, and optional `vars` naming a set in
+`var_sets` (the lab captures use the lab's address groups; the rest use the top-level `vars`).
 
 Suricata settings are passed with `--set`; there is no custom `suricata.yaml` in the repo.
 CI (`.github/workflows/test.yml`) runs gitleaks, then the same tests inside the `jasonish/suricata:8.0.7`

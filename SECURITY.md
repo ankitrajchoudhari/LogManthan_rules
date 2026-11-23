@@ -10,7 +10,8 @@ Report security issues privately using GitHub's **"Report a vulnerability"** but
 - **Secrets:** tokens, passwords, API keys, `.env`, `*.key`, `*.pem`.
   gitleaks runs as a pre-commit hook and in CI on the full history.
 - **Real network details:** real IPs, hostnames, usernames, client or company names.
-  Use `203.0.113.0/24` (documentation range) in tests and `10.10.1.0/24` in the lab only.
+  Use `203.0.113.0/24` (documentation range) in tests and `10.10.1.0/24` in the lab only. The lab
+  captures in `tests/suricata/lab/` (and their `lab` address-group set) carry lab addresses.
   Site values for the address groups (`OT_NET`, `OT_WRITERS`, `ENG_WS`, `DNP3_MASTERS`, `IT_NET`)
   live outside this repo.
 - **Third-party captures:** they are downloaded at test time and verified by SHA-256.

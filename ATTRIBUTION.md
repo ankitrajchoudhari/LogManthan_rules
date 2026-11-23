@@ -11,5 +11,10 @@
   at test time and refuses it if its SHA-256 differs from the one pinned in `fixtures.json`.
 - No changes made: the captures are replayed as published.
 
+**Lab captures (`tests/suricata/lab/`)**
+- Original captures recorded from this repo's own Docker lab (`make record-fixtures`).
+- Synthetic traffic between lab containers on 10.10.1.0/24 only; no real hosts or data.
+- Licensed with the rules under the Detection Rule License 1.1.
+
 ## Licence text
 - `LICENSE`: Detection Rule License 1.1, from https://github.com/SigmaHQ/Detection-Rule-License
