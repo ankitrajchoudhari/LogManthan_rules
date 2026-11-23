@@ -1,0 +1,26 @@
+title: LM-OT reconnaissance alert from Suricata
+id: 29e12fb1-9ab0-4a7f-be06-f86cf553af00
+name: lm_ot_recon
+status: experimental
+description: |
+    Building block for correlations. Matches the LM-OT Suricata alerts that mean an OT device is being
+    discovered or fingerprinted: Modbus Read Device Identification (9100004), Modbus connection scan
+    (9100006) and EtherNet/IP List Identity (9100020). Suricata already raises each of these alerts;
+    this rule only names them for the correlation rules.
+references:
+    - https://attack.mitre.org/techniques/T0846/
+author: LogManthan OT detections
+date: 2026-11-23
+logsource:
+    product: suricata
+    service: alert
+detection:
+    selection:
+        signature_id:
+            - 9100004
+            - 9100006
+            - 9100020
+    condition: selection
+falsepositives:
+    - Asset-inventory or engineering tools run from a host that is not in ENG_WS
+level: low

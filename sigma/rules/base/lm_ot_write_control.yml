@@ -1,0 +1,28 @@
+title: LM-OT write or control command alert from Suricata
+id: d5001680-f6e8-4297-a00b-3b2fdf3a626e
+name: lm_ot_write_control
+status: experimental
+description: |
+    Building block for correlations. Matches the LM-OT Suricata alerts for a write or control command
+    from a host that is not allowed to send it: Modbus write from an unauthorised host (9100001) and
+    DNP3 Direct Operate, Write, Select and Operate from a non-master (9100012-9100015).
+references:
+    - https://attack.mitre.org/techniques/T0855/
+    - https://attack.mitre.org/techniques/T0836/
+author: LogManthan OT detections
+date: 2026-11-23
+logsource:
+    product: suricata
+    service: alert
+detection:
+    selection:
+        signature_id:
+            - 9100001
+            - 9100012
+            - 9100013
+            - 9100014
+            - 9100015
+    condition: selection
+falsepositives:
+    - A legitimate HMI, SCADA server or master that is missing from OT_WRITERS or DNP3_MASTERS
+level: high

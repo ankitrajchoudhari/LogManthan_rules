@@ -1,0 +1,39 @@
+title: LM-OT priority 1 (Critical) alert from Suricata
+id: 43ecab54-44ba-4fac-b8e3-7692e5428a19
+name: lm_ot_priority1
+status: experimental
+description: |
+    Building block for correlations. Matches every LM-OT Suricata rule with priority:1, listed by
+    signature_id because the alert priority is not among the fields LogManthan's Sigma engine is known
+    to see. The test suite fails if this list and the priority:1 rules in suricata/ot/lm-ot.rules ever
+    differ, so a new priority:1 rule must be added here.
+references:
+    - https://attack.mitre.org/techniques/T0855/
+    - https://attack.mitre.org/techniques/T0836/
+    - https://attack.mitre.org/techniques/T0814/
+    - https://attack.mitre.org/techniques/T0816/
+author: LogManthan OT detections
+date: 2026-11-23
+logsource:
+    product: suricata
+    service: alert
+detection:
+    selection:
+        signature_id:
+            - 9100001
+            - 9100002
+            - 9100003
+            - 9100010
+            - 9100011
+            - 9100012
+            - 9100013
+            - 9100014
+            - 9100015
+            - 9100016
+            - 9100017
+            - 9100030
+            - 9100040
+    condition: selection
+falsepositives:
+    - See the individual LM-OT rules in SIDS.md
+level: high

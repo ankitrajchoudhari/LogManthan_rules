@@ -1,0 +1,26 @@
+title: LM-OT three or more Critical alerts from one host in 5 minutes
+id: 4de96d61-ce3e-4e51-86dc-5fd19e6652b3
+name: lm_ot_priority1_burst
+status: experimental
+description: |
+    One host raises 3 or more priority:1 (Critical) LM-OT alerts within 5 minutes, for example
+    unauthorised writes followed by Force Listen Only and Restart Communications. Several dangerous
+    actions in a short time from the same source point to an active attack, not a misconfiguration.
+references:
+    - https://attack.mitre.org/techniques/T0855/
+    - https://attack.mitre.org/techniques/T0814/
+    - https://attack.mitre.org/techniques/T0816/
+author: LogManthan OT detections
+date: 2026-11-23
+correlation:
+    type: event_count
+    rules:
+        - lm_ot_priority1
+    group-by:
+        - src_ip
+    timespan: 5m
+    condition:
+        gte: 3
+falsepositives:
+    - A misconfigured HMI or master that repeats a write it is not allowed to send
+level: critical

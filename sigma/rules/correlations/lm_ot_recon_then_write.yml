@@ -1,0 +1,24 @@
+title: LM-OT reconnaissance followed by a write or control command from the same host
+id: 3d3949c8-8d34-4902-ab2e-85bdf5bb66bb
+name: lm_ot_recon_then_write
+status: experimental
+description: |
+    A host first discovers or fingerprints OT devices (lm_ot_recon) and then, within 10 minutes, sends
+    a write or control command it is not allowed to send (lm_ot_write_control). The order matters:
+    recon must come first. This is the typical path from reconnaissance to impact.
+references:
+    - https://attack.mitre.org/techniques/T0846/
+    - https://attack.mitre.org/techniques/T0855/
+author: LogManthan OT detections
+date: 2026-11-23
+correlation:
+    type: temporal_ordered
+    rules:
+        - lm_ot_recon
+        - lm_ot_write_control
+    group-by:
+        - src_ip
+    timespan: 10m
+falsepositives:
+    - An engineering workstation missing from ENG_WS and OT_WRITERS that scans and then writes
+level: critical
