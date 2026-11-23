@@ -1,0 +1,94 @@
+{
+  "source": {
+    "name": "ITI ICS-Security-Tools pcaps",
+    "url": "https://github.com/ITI/ICS-Security-Tools",
+    "license": "CC BY 4.0",
+    "found_via": "https://github.com/SackOfHacks/ICS-PCAP-Challenges"
+  },
+  "vars": {
+    "OT_NET": "any",
+    "OT_WRITERS": "[203.0.113.1]",
+    "ENG_WS": "[203.0.113.2]",
+    "DNP3_MASTERS": "[203.0.113.3]",
+    "IT_NET": "[203.0.113.0/24]"
+  },
+  "fixtures": [
+    {
+      "id": "dnp3_cold_restart_and_response",
+      "url": "https://raw.githubusercontent.com/ITI/ICS-Security-Tools/master/pcaps/dnp3/cold_restart_and_response.pcap",
+      "sha256": "657d7ce09263e193c1b31c2eb60e50700e61a9088a03124184db16588577e64f",
+      "expect": "fire",
+      "expect_sids": [9100010]
+    },
+    {
+      "id": "dnp3_warm_restart_and_response",
+      "url": "https://raw.githubusercontent.com/ITI/ICS-Security-Tools/master/pcaps/dnp3/warm_restart_and_response.pcap",
+      "sha256": "18037e6833acdfa3dbb4c9251488a6c601d1432718457602fc22e7861cbce56e",
+      "expect": "fire",
+      "expect_sids": [9100011]
+    },
+    {
+      "id": "dnp3_directoperate_and_response",
+      "url": "https://raw.githubusercontent.com/ITI/ICS-Security-Tools/master/pcaps/dnp3/directoperate_and_response.pcap",
+      "sha256": "fbbc86d03de7637875e4675df33382839e3ac2018aa705ff01c379271dc72f3b",
+      "expect": "fire",
+      "expect_sids": [9100012]
+    },
+    {
+      "id": "dnp3_direct_operate_analog_output",
+      "url": "https://raw.githubusercontent.com/ITI/ICS-Security-Tools/master/pcaps/dnp3/direct_operate_analog_output.pcap",
+      "sha256": "f8d3d32754084b4355b3df9fc863b9691e832487ac96e0adda439624b29fb712",
+      "expect": "fire",
+      "expect_sids": [9100012]
+    },
+    {
+      "id": "dnp3_write_binary_output",
+      "url": "https://raw.githubusercontent.com/ITI/ICS-Security-Tools/master/pcaps/dnp3/write_binary_output.pcap",
+      "sha256": "9f0e6a090280879729b543ba693e09756723e3707daf78303aca6b71c7b73b1f",
+      "expect": "fire",
+      "expect_sids": [9100013]
+    },
+    {
+      "id": "dnp3_select_operate_and_responses",
+      "url": "https://raw.githubusercontent.com/ITI/ICS-Security-Tools/master/pcaps/dnp3/select_operate_and_responses.pcap",
+      "sha256": "2b9c0c043d076e562f3870f5b2b3146f562dfa91d9625c7a0de51a9818ae96ff",
+      "expect": "fire",
+      "expect_sids": [9100014, 9100015]
+    },
+    {
+      "id": "dnp3_disable_unsolcited_and_response",
+      "url": "https://raw.githubusercontent.com/ITI/ICS-Security-Tools/master/pcaps/dnp3/disable_unsolcited_and_response.pcap",
+      "sha256": "689639f16ea90fd9af4f74dbef5bfd6182836325567958d6bc1f287c8ffaa476",
+      "expect": "fire",
+      "expect_sids": [9100016]
+    },
+    {
+      "id": "dnp3_file_delete",
+      "url": "https://raw.githubusercontent.com/ITI/ICS-Security-Tools/master/pcaps/dnp3/file_delete.pcap",
+      "sha256": "46de2e38844e20e852da440d8a74c98c7910677fb55e03ad08d2e2e80cf92cee",
+      "expect": "fire",
+      "expect_sids": [9100017]
+    },
+    {
+      "id": "dnp3_read_and_response",
+      "url": "https://raw.githubusercontent.com/ITI/ICS-Security-Tools/master/pcaps/dnp3/read_and_response.pcap",
+      "sha256": "26e2d60fd228280993c5c41ffb4f4d3105e75c2c2dbefea732e4f99fe3ae2698",
+      "expect": "silent",
+      "expect_sids": []
+    },
+    {
+      "id": "EthernetIP_enip_test",
+      "url": "https://raw.githubusercontent.com/ITI/ICS-Security-Tools/master/pcaps/EthernetIP/enip_test.pcap",
+      "sha256": "0ba6c01fde28912e9f890d839b991cff71cca8e8259e1d93e9c3a312c43bc255",
+      "expect": "fire",
+      "expect_sids": [9100020]
+    },
+    {
+      "id": "bro_modbus_modbus",
+      "url": "https://raw.githubusercontent.com/ITI/ICS-Security-Tools/master/pcaps/bro/modbus/modbus.pcap",
+      "sha256": "bb37b8992e8cefec6a6b4438656bb0f6dd6477e1a668905045a4cbe9d56ddc93",
+      "expect": "fire",
+      "expect_sids": [9100001, 9100002, 9100003, 9100004]
+    }
+  ]
+}
