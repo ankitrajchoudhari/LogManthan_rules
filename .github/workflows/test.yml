@@ -28,17 +28,10 @@ jobs:
           tar -xzf "$RUNNER_TEMP/gitleaks.tgz" -C "$RUNNER_TEMP" gitleaks
           "$RUNNER_TEMP/gitleaks" git --redact --verbose .
 
-      - name: Install Suricata 8
+      # Production runs Suricata 8.0.7, so tests run in that exact image, pinned by digest.
+      - name: Lint + static + dynamic tests (Suricata 8.0.7 container)
+        env:
+          SURICATA_IMAGE: "jasonish/suricata@sha256:bf4bea5b45d9c10265a3ee6628e2ec8930b9d1fb7caf9d1afb63af413b9cbb26"  # 8.0.7
         run: |
-          sudo add-apt-repository -y ppa:oisf/suricata-stable
-          sudo apt-get update
-          sudo apt-get install -y suricata
-          # The package makes /etc/suricata root-only; tests run as the runner user.
-          sudo chmod -R o+rX /etc/suricata
-          # Let the test user write the Hyperscan cache (otherwise suricata -T prints a warning).
-          sudo mkdir -p /var/lib/suricata/cache/sgh
-          sudo chown -R "$(id -u):$(id -g)" /var/lib/suricata
-          suricata -V
-
-      - name: Lint + static + dynamic tests
-        run: python3 scripts/test_suricata.py
+          docker run --rm -v "$PWD:/src" -w /src --entrypoint suricata "$SURICATA_IMAGE" -V
+          docker run --rm -v "$PWD:/src" -w /src --entrypoint python3 "$SURICATA_IMAGE" scripts/test_suricata.py
