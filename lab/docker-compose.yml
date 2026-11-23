@@ -1,4 +1,4 @@
-# LogManthan OT lab: Modbus PLC, HMI, attacker and a Suricata 8 sensor.
+# LogManthan OT lab: Modbus PLC and HMI, DNP3 outstation and master, attacker and a Suricata 8 sensor.
 # One internal bridge (10.10.1.0/24, no internet, no host ports published).
 name: otlab
 
@@ -42,6 +42,25 @@ services:
     depends_on: [plc-modbus, suricata]
     networks:
       otlab: { ipv4_address: 10.10.1.20 }
+
+  dnp3-outstation:
+    build: { context: ., dockerfile: dnp3-outstation/Dockerfile }
+    image: otlab/dnp3-outstation:local
+    <<: *hardened
+    networks:
+      otlab: { ipv4_address: 10.10.1.11 }
+
+  dnp3-master:
+    build: { context: ., dockerfile: dnp3-master/Dockerfile }
+    image: otlab/dnp3-master:local
+    <<: *hardened
+    environment:
+      OUTSTATION_HOST: 10.10.1.11
+      POLL_SECONDS: "2"
+      INTEGRITY_SECONDS: "60"
+    depends_on: [dnp3-outstation, suricata]
+    networks:
+      otlab: { ipv4_address: 10.10.1.40 }   # DNP3_MASTERS
 
   attacker:
     profiles: [attack]           # only started by `make attack`

@@ -8,10 +8,10 @@ vars:
   address-groups:
     HOME_NET: "[10.10.1.0/24]"
     EXTERNAL_NET: "!$HOME_NET"
-    OT_NET: "[10.10.1.10]"          # plc-modbus
+    OT_NET: "[10.10.1.10,10.10.1.11]"  # plc-modbus, dnp3-outstation
     OT_WRITERS: "[10.10.1.20]"      # hmi
     ENG_WS: "[10.10.1.30]"          # engineering workstation slot (unused)
-    DNP3_MASTERS: "[10.10.1.40]"    # DNP3 master slot (phase 6)
+    DNP3_MASTERS: "[10.10.1.40]"    # dnp3-master
     IT_NET: "[10.10.1.128/25]"      # IT network slot (unused)
   port-groups: {}
 
@@ -73,7 +73,7 @@ app-layer:
 stream:
   midstream: true
   reassembly:
-    depth: 0           # long-lived Modbus sessions
+    depth: 0           # long-lived Modbus and DNP3 sessions
 
 security:
   lua:
