@@ -33,6 +33,8 @@ jobs:
           sudo add-apt-repository -y ppa:oisf/suricata-stable
           sudo apt-get update
           sudo apt-get install -y suricata
+          # The package makes /etc/suricata root-only; tests run as the runner user.
+          sudo chmod -R o+rX /etc/suricata
           suricata -V
 
       - name: Lint + static + dynamic tests
