@@ -9,6 +9,7 @@ Scenarios and the LM SID each one should raise:
   listen-only    FC8 sub 4 Force Listen Only Mode                        -> 9100002
   restart-comms  FC8 sub 1 Restart Communications                        -> 9100003
   flood          1000 FC3 reads in a burst over 4 connections             -> 9100007
+  flood --count 3000                                                     -> 9100007, 9100008
 """
 
 import argparse

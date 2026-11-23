@@ -29,12 +29,14 @@ save() {  # save <capture name>
   echo "record: lab_$1 $(wc -c < "$DEST/lab_$1.pcap") bytes sha256 $sum"
 }
 
-record_attack() {  # record_attack <scenario> <seconds>
-  name=$(echo "$1" | tr '-' '_')
-  $COMPOSE run --rm capture "$name" "$2" "$ATTACKER" > /dev/null 2>&1 &
+record_attack() {  # record_attack <scenario> <seconds> [capture name] [extra attacker args...]
+  scenario=$1; secs=$2; shift 2
+  name=$(echo "$scenario" | tr '-' '_')
+  if [ $# -gt 0 ]; then name=$1; shift; fi
+  $COMPOSE run --rm capture "$name" "$secs" "$ATTACKER" > /dev/null 2>&1 &
   pid=$!
   wait_capture_started
-  $COMPOSE run --rm attacker "$1" 2>&1 | grep '^attacker:' || true
+  $COMPOSE run --rm attacker "$scenario" "$@" 2>&1 | grep '^attacker:' || true
   wait "$pid"
   save "$name"
 }
@@ -49,11 +51,12 @@ record_hmi() {  # record_hmi <seconds>
   save hmi_normal
 }
 
-[ $# -eq 0 ] && set -- scan write listen-only restart-comms flood hmi
+[ $# -eq 0 ] && set -- scan write listen-only restart-comms flood flood-heavy hmi
 for s in "$@"; do
   case "$s" in
     scan)  record_attack scan 25 ;;
     flood) record_attack flood 20 ;;
+    flood-heavy) record_attack flood 20 flood_heavy --count 3000 ;;
     write|listen-only|restart-comms) record_attack "$s" 12 ;;
     hmi)   record_hmi 130 ;;
     *) echo "record: unknown scenario $s" >&2; exit 2 ;;
