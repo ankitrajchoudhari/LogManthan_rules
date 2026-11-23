@@ -1,0 +1,84 @@
+# LogManthan OT lab: Modbus PLC, HMI, attacker and a Suricata 8 sensor.
+# One internal bridge (10.10.1.0/24, no internet, no host ports published).
+name: otlab
+
+networks:
+  otlab:
+    name: otlab
+    internal: true
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: otlab0   # the sensor sniffs this bridge
+    ipam:
+      config:
+        - subnet: 10.10.1.0/24
+          gateway: 10.10.1.1
+
+x-hardened: &hardened
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  plc-modbus:
+    build: { context: ., dockerfile: plc-modbus/Dockerfile }
+    image: otlab/plc-modbus:local
+    <<: *hardened
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"   # bind 502 as non-root, no extra capability
+    networks:
+      otlab: { ipv4_address: 10.10.1.10 }
+
+  hmi:
+    build: { context: ., dockerfile: hmi/Dockerfile }
+    image: otlab/hmi:local
+    <<: *hardened
+    environment:
+      PLC_HOST: 10.10.1.10
+      POLL_SECONDS: "1"
+      WRITE_SECONDS: "30"
+    depends_on: [plc-modbus, suricata]
+    networks:
+      otlab: { ipv4_address: 10.10.1.20 }
+
+  attacker:
+    profiles: [attack]           # only started by `make attack`
+    build: { context: ., dockerfile: attacker/Dockerfile }
+    image: otlab/attacker:local
+    <<: *hardened
+    networks:
+      otlab: { ipv4_address: 10.10.1.66 }
+
+  suricata:
+    image: jasonish/suricata@sha256:bf4bea5b45d9c10265a3ee6628e2ec8930b9d1fb7caf9d1afb63af413b9cbb26  # 8.0.7
+    # Host network namespace is needed to see the otlab0 bridge. No ports are opened.
+    network_mode: host
+    read_only: true
+    cap_drop: [ALL]
+    # NET_ADMIN/NET_RAW: packet capture. DAC_READ_SEARCH: read the image's root-unreadable
+    # (mode 0600, owner suricata) suricata.yaml; it grants read access only, not write.
+    cap_add: [NET_ADMIN, NET_RAW, DAC_READ_SEARCH]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: [/tmp, /var/run/suricata, /var/lib/suricata]
+    entrypoint: ["/bin/sh", "/lab/run.sh"]
+    environment:
+      LAB_IFACE: otlab0
+    volumes:
+      - ../suricata:/etc/suricata/lm-rules:ro
+      - ./suricata/run.sh:/lab/run.sh:ro
+      - ./out:/var/log/suricata
+    depends_on: [plc-modbus]
+
+  capture:
+    profiles: [capture]          # only started by `make capture`
+    build: { context: ., dockerfile: capture/Dockerfile }
+    image: otlab/capture:local
+    network_mode: host
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, NET_RAW]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      LAB_IFACE: otlab0
+    volumes:
+      - ./out:/out
