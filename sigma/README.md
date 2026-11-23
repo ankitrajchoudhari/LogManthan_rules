@@ -52,6 +52,10 @@ alerts the PLC's responses raise. The builder refuses any address outside 10.10.
 restart-comms. Captures can also be shifted in time to test the edges: inside and outside each
 window, wrong order, a different source host, 2 and exactly 3 Critical alerts, alerts spread out, the
 HMI baseline, and the HMI with both floods (priority 2 and event alerts must not count).
+DNP3 scenarios use the lab's DNP3 captures: the five DNP3 attacks at their real times (a Critical
+burst), a Modbus scan followed by a DNP3 Direct Operate (recon then control across protocols), the
+wrong order, two restarts (below 3) versus two restarts plus Disable Unsolicited (exactly 3), and
+10 minutes of normal DNP3 master polling, alone and together with the HMI baseline.
 
 The scenario check uses a small reference evaluator of the Sigma correlation semantics. It supports
 only what these rules use and fails on anything else. It is not LogManthan's engine.

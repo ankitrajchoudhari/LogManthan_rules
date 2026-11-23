@@ -12,13 +12,13 @@ LogManthan ingests **Suricata alerts only**, so all OT protocol detection is don
 |---|---|
 | `suricata/ot/lm-ot.rules` | OT signatures: Modbus, DNP3, EtherNet/IP, S7comm, IT→OT |
 | `tests/suricata/fixtures.json` | Test captures: URL or repo path + SHA-256 + expected SIDs |
-| `tests/suricata/lab/` | Our own small lab captures (one per attack scenario + normal HMI traffic) |
+| `tests/suricata/lab/` | Our own small lab captures (one per attack scenario + normal HMI and DNP3 master traffic) |
 | `scripts/test_suricata.py` | Lint + `suricata -T` + pcap replay tests |
 | `sigma/rules/` | Sigma base rules and correlations over LM-OT alerts ([sigma/README.md](sigma/README.md)) |
 | `sigma/pipelines/logmanthan-fields.yml` | The one place Sigma field names are defined (TODO(rajeev): confirm) |
 | `tests/sigma/` | Sigma test events (alerts from the lab captures) and correlation scenarios |
 | `scripts/test_sigma.py` | `sigma check` + field/SID sync + correlation scenario tests |
-| `lab/` | Docker OT lab: Modbus PLC, HMI, attacker, Suricata sensor ([lab/README.md](lab/README.md)) |
+| `lab/` | Docker OT lab: Modbus PLC and HMI, DNP3 outstation and master, attacker, Suricata sensor ([lab/README.md](lab/README.md)) |
 | `Makefile` | `make test`, `make sigma-test`, `make lab-up`, `make attack SCENARIO=...`, `make alerts`, `make capture` |
 | `tuning/` | Rate limits for Suricata's bundled Modbus/DNP3 event rules, for LogManthan ([tuning/README.md](tuning/README.md)) |
 | `SIDS.md` | SID registry |
@@ -73,7 +73,8 @@ The runner:
 Any Suricata warning or error line fails the run, even if Suricata exits 0.
 
 Fixture fields: `id`, `url` (external, downloaded) or `path` (in the repo), `sha256`,
-`expect` (`fire` / `silent` / `absent`: none of `expect_sids` may fire), `expect_sids`, optional `exact: true`, and optional `vars` naming a set in
+`expect` (`fire` / `silent` / `absent`: none of `expect_sids` may fire), `expect_sids`, optional `exact: true`, optional `app_proto` (every flow must be decoded as that protocol, with no
+anomaly events), and optional `vars` naming a set in
 `var_sets` (the lab captures use the lab's address groups; the rest use the top-level `vars`).
 
 Suricata settings are passed with `--set`; there is no custom `suricata.yaml` in the repo.

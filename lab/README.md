@@ -1,7 +1,8 @@
 # OT lab
 
-A small, self-contained Modbus/TCP plant in Docker: a PLC, an HMI doing normal polling, an attacker,
-and a Suricata 8.0.7 sensor running this repo's rules. Use it to prove each rule fires on the attack
+A small, self-contained OT plant in Docker: a Modbus/TCP PLC with an HMI doing normal polling, a DNP3
+outstation with a master doing normal class polling, an attacker, and a Suricata 8.0.7 sensor running
+this repo's rules. Use it to prove each rule fires on the attack
 it targets and stays quiet on normal traffic. It can also be run as a **cyber-range exercise**
 (see [Exercise](#exercise)).
 
@@ -14,9 +15,10 @@ the lab at the gateway address 10.10.1.1.
 | Host | IP | Role | Address group |
 |---|---|---|---|
 | `plc-modbus` | 10.10.1.10 | pymodbus server on 502: coils 0–99, holding registers 0–99 | `OT_NET` |
+| `dnp3-outstation` | 10.10.1.11 | DNP3 outstation (RTU) on 20000, link address 10: 8 binary inputs, 4 binary outputs, 4 analog inputs | `OT_NET` |
 | `hmi` | 10.10.1.20 | Reads HR0–9 and coils 0–15 every 1 s, writes a setpoint to HR0 every 30 s | `OT_WRITERS` |
 | *(none yet)* | 10.10.1.30 | Engineering workstation slot | `ENG_WS` |
-| *(phase 6)* | 10.10.1.40 | DNP3 master slot | `DNP3_MASTERS` |
+| `dnp3-master` | 10.10.1.40 | DNP3 master, link address 1: integrity poll (class 1, 2, 3, 0) on connect and every 60 s, class 1–3 event poll every 2 s, clears the outstation's restart flag with an allowed WRITE | `DNP3_MASTERS` |
 | `attacker` | 10.10.1.66 | Attack traffic generator, started on demand | none |
 | *(unused)* | 10.10.1.128/25 | IT network slot | `IT_NET` |
 | `suricata` | host netns | Sniffs `otlab0` with [suricata/suricata.yaml](suricata/suricata.yaml), writes `lab/out/eve.json` | — |
@@ -26,7 +28,7 @@ the lab at the gateway address 10.10.1.1.
 Needs Docker (with Compose v2) and GNU make. Run from the repo root.
 
 ```sh
-make lab-up                     # build + start plc-modbus, hmi, suricata
+make lab-up                     # build + start plc-modbus, hmi, dnp3-outstation, dnp3-master, suricata
 make alerts                     # LM-OT alerts seen so far (none, if only the HMI is running)
 make attack SCENARIO=write      # run one attack scenario
 make alerts ARGS="--src 10.10.1.66 --expect 9100001"
@@ -50,8 +52,19 @@ make lab-down
 | `flood` | 1000 FC3 reads in a burst over 4 connections | T0814 | 9100007 | 2 |
 | `"flood --count 3000"` | 3000 FC3 reads in a burst (~1.8 s) over 4 connections | T0814 | 9100007, 9100008 | 2, 2 |
 
+| `dnp3-cold-restart` | DNP3 FC13 Cold Restart to the outstation | T0816 | 9100010 | 1 |
+| `dnp3-warm-restart` | DNP3 FC14 Warm Restart | T0816 | 9100011 | 1 |
+| `dnp3-direct-operate` | DNP3 FC5 Direct Operate, CROB (pulse on) on output 0 | T0855 | 9100012 | 1 |
+| `dnp3-write` | DNP3 FC2 Write, g50v1 time and date | T0836 | 9100013 | 1 |
+| `dnp3-disable-unsolicited` | DNP3 FC21 Disable Unsolicited for classes 1–3 | T0878 | 9100016 | 1 |
+
+DNP3 scenarios target the outstation 10.10.1.11 by default and reuse the master's link address 1:
+DNP3 has no authentication without Secure Authentication, so only the source IP gives the attacker away.
+
 Baseline: HMI-only traffic (reads plus the allowed write from 10.10.1.20) must raise **no priority:1 alerts**.
-Check with `make alerts ARGS="--forbid-priority 1"` before running any attack.
+Check with `make alerts ARGS="--forbid-priority 1"` before running any attack. The same holds for the
+DNP3 master's polling (10 minutes recorded in `lab_dnp3_master_normal` raise no alert at all, including
+its allowed WRITE, and no Suricata DNP3 event).
 
 Notes:
 - `flood` is caught by the request-rate rule 9100007 (300 Modbus requests in 10 s from a host that is
@@ -80,7 +93,7 @@ use `--since` to look at one run only.
 
 ## Safety and hardening
 
-- The attacker and HMI refuse any target outside `10.10.1.0/24`, and also the network address
+- The attacker, HMI and DNP3 master refuse any target outside `10.10.1.0/24`, and also the network address
   10.10.1.0, the gateway 10.10.1.1 and the broadcast 10.10.1.255, before opening a socket
   (`common/labnet.py: check_target`). `scan` skips those three as well.
   Try `docker run --rm --network none otlab/attacker:local write --target 10.10.1.1`.
@@ -88,7 +101,7 @@ use `--since` to look at one run only.
   (`com.docker.network.bridge.inhibit_ipv4`). Without that, 10.10.1.1 is the Docker host itself: on Docker
   Desktop it answered on every port tried, and port 111 (rpcbind) was open.
 - No host ports are published. No container is `privileged`.
-- PLC, HMI and attacker run as a non-root user (uid 10001) with a read-only root filesystem,
+- PLC, HMI, DNP3 outstation and master, and attacker run as a non-root user (uid 10001) with a read-only root filesystem,
   all capabilities dropped and `no-new-privileges`. The PLC binds 502 using the per-container
   sysctl `net.ipv4.ip_unprivileged_port_start=0` instead of a capability.
 - The Suricata sensor and the capture container use the host network namespace, because that is the
@@ -106,12 +119,19 @@ use `--since` to look at one run only.
     With `-p`, a Linux bridge passes switched unicast traffic to the capture only while the bridge is
     promiscuous, which the sensor sets. So capture refuses to start unless the sensor is running.
 - Images are pinned by digest; pymodbus is pinned by version and hash.
+- DNP3 is our own minimal stdlib implementation ([common/dnp3.py](common/dnp3.py)): link layer with
+  CRC-16/DNP on the header and every 16-byte block, single-segment transport, the application
+  messages the lab needs. No third-party DNP3 library: the maintained ones are non-commercial or
+  commercial (stepfunc dnp3, FreyrSCADA), one has no licence file (dnp3py), and the Apache-2.0 ones wrap
+  opendnp3, archived since 2022 (pydnp3, dnp3-python, yadnp3).
 - No passwords exist anywhere in the lab.
 
 ## Test captures
 
-`make record-fixtures` re-records one capture per scenario plus 130 s of normal HMI polling into
-`tests/suricata/lab/` (attack captures are filtered to the attacker, the HMI one to the HMI). The test
+`make record-fixtures` re-records one capture per scenario plus 130 s of normal HMI polling and
+600 s of normal DNP3 master polling into `tests/suricata/lab/` (attack captures are filtered to the
+attacker, the baselines to the HMI or master). DNP3 fixtures also set `app_proto: dnp3`: the test fails
+unless Suricata decodes every flow as DNP3 with no anomaly events. The test
 runner replays them with the lab address groups and exact matching. Then update the `sha256` values in
 `tests/suricata/fixtures.json` with the ones the script prints.
 
