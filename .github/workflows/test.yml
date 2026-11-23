@@ -35,3 +35,18 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/src" -w /src --entrypoint suricata "$SURICATA_IMAGE" -V
           docker run --rm -v "$PWD:/src" -w /src --entrypoint python3 "$SURICATA_IMAGE" scripts/test_suricata.py
+
+      # The Sigma test events must be exactly what Suricata produces from our lab captures today.
+      - name: Sigma test events are up to date (Suricata 8.0.7 container)
+        env:
+          SURICATA_IMAGE: "jasonish/suricata@sha256:bf4bea5b45d9c10265a3ee6628e2ec8930b9d1fb7caf9d1afb63af413b9cbb26"  # 8.0.7
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src --entrypoint python3 "$SURICATA_IMAGE" scripts/build_sigma_events.py --check
+
+      # Sigma tools from sigma/requirements.txt only, every file verified by SHA-256.
+      - name: Sigma check + correlation tests
+        run: |
+          python3 --version
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install --require-hashes -r sigma/requirements.txt
+          "$RUNNER_TEMP/venv/bin/python" scripts/test_sigma.py
