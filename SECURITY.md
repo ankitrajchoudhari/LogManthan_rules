@@ -1,8 +1,8 @@
 # Security
 
 ## Reporting a problem
-Report security issues privately using GitHub's **"Report a vulnerability"** button
-(Security tab → Advisories) on this repository. Please don't open a public issue for:
+Report security issues privately to the maintainer, **Ankit Raj Choudhari**. Never report them
+in a public issue. This applies in particular to:
 - a leaked secret or a real address that slipped into the history
 - a rule that could be abused, or a bypass for a rule
 

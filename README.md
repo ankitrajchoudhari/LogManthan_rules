@@ -1,5 +1,7 @@
 # LogManthan OT detection rules
 
+Part of LogManthan, DeepTrustX AI. Guidance: Prof. Jaimandeep Singh; platform integration: Rajeev; update workflow: Abhishek.
+
 Detection rules for industrial (OT) networks, written for the LogManthan SOC platform, together with
 the tests and the Docker lab used to prove them.
 
@@ -882,8 +884,8 @@ Commits keep their original author, so `git log` shows who wrote each change.
   rejects them.
 - **Captures licensing.** External captures are downloaded at test time and pinned by SHA-256. Only
   CC BY, MIT or BSD datasets; never non-commercial or unlicensed ones.
-- **Reporting a problem.** Use GitHub's private "Report a vulnerability" button, not a public issue.
-  See [SECURITY.md](SECURITY.md).
+- **Reporting a problem.** Report it privately to the maintainer, Ankit Raj Choudhari. Never in a
+  public issue. See [SECURITY.md](SECURITY.md).
 
 ## 16. Troubleshooting and FAQ
 
