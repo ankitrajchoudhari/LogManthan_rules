@@ -17,7 +17,7 @@ correlation:
         - lm_ot_recon
         - lm_ot_write_control
     group-by:
-        - src_ip
+        - src_endpoint.ip
     timespan: 10m
 falsepositives:
     - An engineering workstation missing from ENG_WS and OT_WRITERS that scans and then writes

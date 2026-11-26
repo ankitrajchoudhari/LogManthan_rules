@@ -2,17 +2,21 @@
 """Test runner for the LogManthan OT Sigma rules.
 
 1. Check     `sigma check --fail-on-error --fail-on-issues sigma/rules` (sigma-cli / pySigma).
-2. Fields    the field pipeline loads in pySigma, and every field a rule uses is listed in it
-             (sigma/pipelines/logmanthan-fields.yml is the one place field names are defined).
-3. Sync      the base rules only name LM-OT SIDs that exist, and lm_ot_priority1 lists exactly
-             the priority:1 rules in suricata/ot/lm-ot.rules.
+2. Fields    the field pipeline loads in pySigma, and every field a rule uses is a LogManthan field
+             listed in it (sigma/pipelines/logmanthan-fields.yml is the one place field names are
+             defined).
+3. Sync      every base rule requires metadata.product.name: Suricata, the base rules only name
+             LM-OT SIDs that exist, and lm_ot_priority1 lists exactly the priority:1 rules in
+             suricata/ot/lm-ot.rules.
 4. Scenarios evaluate the correlations on alert streams built from our lab captures
-             (tests/sigma/scenarios.json) and compare with the expected result.
+             (tests/sigma/scenarios.json) and compare with the expected result. A scenario with
+             "no_base_matches": true also fails if any base rule matches any of its events.
 
 Step 4 uses a small reference evaluator of the Sigma correlation semantics, written for these
 rules only (selections of field: value lists; event_count and temporal_ordered). It fails loudly
-on any construct it does not support. It is not LogManthan's engine.
-TODO(rajeev): replay tests/sigma/events/ through LogManthan's own Sigma engine as well.
+on any construct it does not support. Field names with dots are paths into the nested event, and
+values are compared as text, as Sigma does. Rajeev replayed the 18 lab scenarios through
+LogManthan's own Sigma engine: 36/36 checks match this evaluator.
 
 Needs Python 3.11+ with sigma/requirements.txt installed (`make sigma-test`).
 """
@@ -37,6 +41,9 @@ SCENARIOS = ROOT / "tests" / "sigma" / "scenarios.json"
 EVENTS = ROOT / "tests" / "sigma" / "events"
 TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%f%z"
 LM_SID_MIN, LM_SID_MAX = 9100000, 9199999
+SID_FIELD = "metadata.event_code"
+PRODUCT_FIELD = "metadata.product.name"
+GROUP_FIELD = "src_endpoint.ip"
 
 
 class Unsupported(Exception):
@@ -97,13 +104,23 @@ def suricata_priorities():
 
 
 # ---------------------------------------------------------------- evaluation
+def get_field(event, field):
+    """Value of a dotted field name in a nested event (None if any part is missing)."""
+    value = event
+    for part in field.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return None
+        value = value[part]
+    return value
+
+
 def base_matches(rule, event):
     det = rule["detection"]
     cond = det["condition"]
     if not isinstance(cond, str) or not re.fullmatch(r"\w+", cond) or cond not in det:
         raise Unsupported(f"{rule['_file']}: only a single selection name is supported as condition")
     for name, field, values in selections(rule):
-        if name == cond and event.get(field) not in values:
+        if name == cond and str(get_field(event, field)) not in {str(v) for v in values}:
             return False
     return True
 
@@ -127,7 +144,7 @@ def correlate(corr_rule, rules, events):
     for ev in events:
         for i, ref in enumerate(refs):
             if base_matches(ref, ev):
-                hits[tuple(ev.get(f) for f in group_by)].append((ev["_t"], i))
+                hits[tuple(get_field(ev, f) for f in group_by)].append((ev["_t"], i))
     fired = {}
     for group, items in hits.items():
         items.sort()
@@ -179,10 +196,11 @@ def build_stream(scenario, base_time):
         shift = timedelta(0)
         if "at" in seg and events:
             shift = base_time + timedelta(seconds=seg["at"]) - events[0]["_t"]
-        for ev in events:
-            ev = dict(ev)
-            ev["_t"] = ev["_t"] + shift
-            ev["src_ip"] = seg.get("rewrite_src", {}).get(ev["src_ip"], ev["src_ip"])
+        for orig in events:
+            ev = json.loads(json.dumps({k: v for k, v in orig.items() if k != "_t"}))  # deep copy
+            ev["_t"] = orig["_t"] + shift
+            src = ev["src_endpoint"]["ip"]
+            ev["src_endpoint"]["ip"] = seg.get("rewrite_src", {}).get(src, src)
             stream.append(ev)
     stream.sort(key=lambda e: e["_t"])
     return stream
@@ -226,29 +244,35 @@ def main():
     for t in yaml.safe_load(pipeline_text)["transformations"]:
         if t["type"] == "field_name_mapping":
             mapping.update(t["mapping"])
+    known = set(mapping.values()) | {PRODUCT_FIELD}  # product name is set by LogManthan itself
     used = fields_used(rules)
-    missing = sorted(used - set(mapping))
-    print(f"  pipeline fields: {', '.join(mapping)}")
-    print(f"  used by rules:   {', '.join(sorted(used))}")
+    missing = sorted(used - known)
+    print(f"  pipeline:      {', '.join(f'{k} -> {v}' for k, v in mapping.items())}, plus {PRODUCT_FIELD}")
+    print(f"  used by rules: {', '.join(sorted(used))}")
     if missing:
-        print(f"  FAIL fields used by rules but not in the pipeline: {missing}")
+        print(f"  FAIL fields used by rules but not LogManthan fields in the pipeline: {missing}")
         failed = True
     else:
-        print("  PASS: every field the rules use is defined in the pipeline")
+        print("  PASS: every field the rules use is a LogManthan field defined in the pipeline")
 
     print("== Sync with suricata/ot/lm-ot.rules ==")
     prios = suricata_priorities()
     for name, rule in sorted(base.items()):
-        sids = {v for sel, field, vals in selections(rule) if field == "signature_id" for v in vals}
+        products = [vals for _, field, vals in selections(rule) if field == PRODUCT_FIELD]
+        if products != [["Suricata"]]:
+            print(f"  FAIL {name}: selection must require {PRODUCT_FIELD}: Suricata "
+                  "(Wazuh rule IDs share metadata.event_code)")
+            failed = True
+        sids = {v for sel, field, vals in selections(rule) if field == SID_FIELD for v in vals}
         unknown = sorted(s for s in sids if s not in prios)
         bad = [s for s in sids if not LM_SID_MIN <= s <= LM_SID_MAX]
         if unknown or bad:
             print(f"  FAIL {name}: SIDs not in lm-ot.rules {unknown or bad}")
             failed = True
         else:
-            print(f"  PASS {name}: {len(sids)} SIDs, all in lm-ot.rules")
+            print(f"  PASS {name}: {PRODUCT_FIELD} Suricata, {len(sids)} SIDs, all in lm-ot.rules")
     p1 = {s for s, p in prios.items() if p == 1}
-    listed = {v for _, f, vals in selections(rules["lm_ot_priority1"]) if f == "signature_id" for v in vals}
+    listed = {v for _, f, vals in selections(rules["lm_ot_priority1"]) if f == SID_FIELD for v in vals}
     if listed != p1:
         print(f"  FAIL lm_ot_priority1 differs from priority:1 rules: missing {sorted(p1 - listed)}, "
               f"extra {sorted(listed - p1)}")
@@ -272,6 +296,10 @@ def main():
             continue
         ok = all(sorted(sc["expect"][n]) == got[n] for n in corrs)
         shown = " ".join(f"{n}={got[n]}" for n in sorted(corrs))
+        if sc.get("no_base_matches"):
+            hit = sorted({n for n, r in base.items() for ev in stream if base_matches(r, ev)})
+            ok = ok and not hit
+            shown += f"  base rules matched={hit}"
         print(f"  {'PASS' if ok else 'FAIL'} {sc['id']:38s} {len(stream):3d} alerts  {shown}"
               + ("" if ok else f"  expected {sc['expect']}"))
         passed += ok

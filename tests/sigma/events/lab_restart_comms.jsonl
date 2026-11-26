@@ -1,1 +1,1 @@
-{"dest_ip": "10.10.1.10", "dest_port": 502, "msg": "LM-OT Modbus diagnostics Restart Communications", "signature_id": 9100003, "src_ip": "10.10.1.66", "src_port": 52916, "timestamp": "2026-11-23T07:01:26.294087+0000"}
+{"dest_ip": "10.10.1.10", "dest_port": 502, "metadata": {"event_code": 9100003, "product": {"name": "Suricata"}}, "msg": "LM-OT Modbus diagnostics Restart Communications", "src_endpoint": {"ip": "10.10.1.66"}, "src_port": 52916, "timestamp": "2026-11-23T07:01:26.294087+0000"}

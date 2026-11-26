@@ -6,6 +6,7 @@ description: |
     Building block for correlations. Matches the LM-OT Suricata alerts for a write or control command
     from a host that is not allowed to send it: Modbus write from an unauthorised host (9100001) and
     DNP3 Direct Operate, Write, Select and Operate from a non-master (9100012-9100015).
+    metadata.product.name: Suricata is required because Wazuh rule IDs share metadata.event_code.
 references:
     - https://attack.mitre.org/techniques/T0855/
     - https://attack.mitre.org/techniques/T0836/
@@ -16,7 +17,8 @@ logsource:
     service: alert
 detection:
     selection:
-        signature_id:
+        metadata.product.name: Suricata
+        metadata.event_code:
             - 9100001
             - 9100012
             - 9100013

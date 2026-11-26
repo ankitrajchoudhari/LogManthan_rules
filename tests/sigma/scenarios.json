@@ -167,6 +167,15 @@
         {"capture": "lab_dnp3_disable_unsolicited", "at": 120}
       ],
       "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": ["10.10.1.66"]}
+    },
+    {
+      "id": "wazuh_same_event_code",
+      "description": "Hand-written Wazuh events (events/wazuh_event_code_collision.jsonl) with metadata.event_code equal to LM-OT SIDs: 9100004 (recon), then 9100001, 9100002 and 9100003 (Critical) from one host within 1 minute. Without metadata.product.name: Suricata both correlations would fire. No base rule may match any of these events.",
+      "segments": [
+        {"capture": "wazuh_event_code_collision"}
+      ],
+      "no_base_matches": true,
+      "expect": {"lm_ot_recon_then_write": [], "lm_ot_priority1_burst": []}
     }
   ]
 }

@@ -10,8 +10,11 @@ fields LogManthan's Sigma engine sees and written to tests/sigma/events/<capture
     python3 scripts/build_sigma_events.py --check   # fail if the committed files are stale
 
 Runs where Suricata runs (the pinned container: `make sigma-events`). Standard library only.
-The field names written here are the logical names used by the Sigma rules; LogManthan's real
-names are mapped in one place, sigma/pipelines/logmanthan-fields.yml (TODO(rajeev)).
+Each event carries the fields the Sigma rules use, under LogManthan's names
+(sigma/pipelines/logmanthan-fields.yml, confirmed by Rajeev): metadata.event_code (the SID),
+metadata.product.name ("Suricata") and src_endpoint.ip. The other fields (timestamp, msg, src_port,
+dest_ip, dest_port) are context for people reading the files; no rule uses them, so they keep their
+eve.json names.
 """
 
 import ipaddress
@@ -28,12 +31,12 @@ LAB_NET = ipaddress.ip_network("10.10.1.0/24")
 
 
 def to_event(ev):
-    """eve.json alert -> the fields LogManthan's Sigma engine sees (logical names)."""
+    """eve.json alert -> the event LogManthan's Sigma engine sees (LogManthan field names)."""
     return {
+        "metadata": {"event_code": ev["alert"]["signature_id"], "product": {"name": "Suricata"}},
+        "src_endpoint": {"ip": ev["src_ip"]},
         "timestamp": ev["timestamp"],
-        "signature_id": ev["alert"]["signature_id"],
         "msg": ev["alert"]["signature"],
-        "src_ip": ev["src_ip"],
         "src_port": ev.get("src_port"),
         "dest_ip": ev["dest_ip"],
         "dest_port": ev.get("dest_port"),
@@ -66,11 +69,11 @@ def build(tmpdir):
     files = {}
     for name, fx in lab_captures(fixtures):
         alerts = ts.replay_alerts(ts.fetch(fx), rules, lab_vars, [f"threshold-file={threshold}"])
-        events = sorted((to_event(a) for a in alerts), key=lambda e: (e["timestamp"], e["signature_id"]))
+        events = sorted((to_event(a) for a in alerts), key=lambda e: (e["timestamp"], e["metadata"]["event_code"]))
         for e in events:  # lab captures must only ever hold lab addresses
-            for k in ("src_ip", "dest_ip"):
-                if ipaddress.ip_address(e[k]) not in LAB_NET:
-                    raise SystemExit(f"{name}: {k} {e[k]} is outside {LAB_NET}; refusing to write")
+            for k, ip in (("src_endpoint.ip", e["src_endpoint"]["ip"]), ("dest_ip", e["dest_ip"])):
+                if ipaddress.ip_address(ip) not in LAB_NET:
+                    raise SystemExit(f"{name}: {k} {ip} is outside {LAB_NET}; refusing to write")
         files[name] = "".join(json.dumps(e, sort_keys=True) + "\n" for e in events)
     return files
 

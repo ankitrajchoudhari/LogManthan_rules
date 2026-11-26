@@ -17,7 +17,7 @@ correlation:
     rules:
         - lm_ot_priority1
     group-by:
-        - src_ip
+        - src_endpoint.ip
     timespan: 5m
     condition:
         gte: 3

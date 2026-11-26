@@ -1,1 +1,1 @@
-{"dest_ip": "10.10.1.10", "dest_port": 502, "msg": "LM-OT Modbus diagnostics Force Listen Only Mode (device goes silent)", "signature_id": 9100002, "src_ip": "10.10.1.66", "src_port": 42438, "timestamp": "2026-11-23T07:01:10.932077+0000"}
+{"dest_ip": "10.10.1.10", "dest_port": 502, "metadata": {"event_code": 9100002, "product": {"name": "Suricata"}}, "msg": "LM-OT Modbus diagnostics Force Listen Only Mode (device goes silent)", "src_endpoint": {"ip": "10.10.1.66"}, "src_port": 42438, "timestamp": "2026-11-23T07:01:10.932077+0000"}

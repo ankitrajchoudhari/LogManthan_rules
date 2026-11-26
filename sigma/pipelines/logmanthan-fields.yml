@@ -1,31 +1,26 @@
 # Field names: the ONE place they are defined for LogManthan.
 #
-# The Sigma rules in sigma/rules/ use the logical names on the left: the Suricata alert fields that
-# LogManthan's Sigma engine is known to see (signature_id, msg, src_ip, dest_ip, ports, timestamp).
-# The names on the right are what LogManthan actually calls them.
+# Left: the field in Suricata's eve.json alert. Right: the name LogManthan's Sigma engine uses for it.
+# Confirmed by Rajeev on LogManthan's Sigma engine (all 18 correlation scenarios replayed there:
+# 36/36 checks match).
 #
-# TODO(rajeev): confirm field names. Each right-hand value below is a placeholder equal to the
-#   logical name, NOT a confirmed LogManthan field. Replace each with the real name (for example
-#   alert.signature_id if LogManthan keeps eve.json nesting). Also confirm:
-#   - the logsource the rules should use (they say product: suricata, service: alert);
-#   - how LogManthan loads Sigma: if it reads rules directly rather than through a pySigma
-#     conversion, the rules themselves need the confirmed names (sed over sigma/rules/).
+# The Sigma rules in sigma/rules/ are written with the LogManthan names (right-hand side), because
+# LogManthan loads the rules as they are. This mapping is for anyone converting a rule written with
+# eve.json names:
+#   sigma convert -t <backend> -p sigma/pipelines/logmanthan-fields.yml <rule>
 #
-# The test suite (scripts/test_sigma.py) fails if a rule uses a field that is not listed here, so
-# this file stays the complete list to confirm.
+# metadata.product.name is set by LogManthan, not taken from eve.json, so it has no left-hand side.
+# Every base rule requires metadata.product.name: Suricata, because Wazuh rule IDs share
+# metadata.event_code with Suricata SIDs.
 #
-# Format: pySigma processing pipeline, usable with sigma-cli, e.g.
-#   sigma convert -t <backend> -p sigma/pipelines/logmanthan-fields.yml sigma/rules
+# The test suite (scripts/test_sigma.py) fails if a rule uses a field that is not listed here
+# (a right-hand value, or metadata.product.name). Only fields the rules use are listed; add a new one
+# only after it is confirmed on LogManthan.
 name: LogManthan Suricata alert field names
 priority: 20
 transformations:
   - id: logmanthan_field_names
     type: field_name_mapping
     mapping:
-      timestamp: timestamp
-      signature_id: signature_id
-      msg: msg
-      src_ip: src_ip
-      src_port: src_port
-      dest_ip: dest_ip
-      dest_port: dest_port
+      signature_id: metadata.event_code
+      src_ip: src_endpoint.ip

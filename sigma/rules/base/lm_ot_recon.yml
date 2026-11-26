@@ -7,6 +7,7 @@ description: |
     discovered or fingerprinted: Modbus Read Device Identification (9100004), Modbus connection scan
     (9100006) and EtherNet/IP List Identity (9100020). Suricata already raises each of these alerts;
     this rule only names them for the correlation rules.
+    metadata.product.name: Suricata is required because Wazuh rule IDs share metadata.event_code.
 references:
     - https://attack.mitre.org/techniques/T0846/
 author: LogManthan OT detections
@@ -16,7 +17,8 @@ logsource:
     service: alert
 detection:
     selection:
-        signature_id:
+        metadata.product.name: Suricata
+        metadata.event_code:
             - 9100004
             - 9100006
             - 9100020

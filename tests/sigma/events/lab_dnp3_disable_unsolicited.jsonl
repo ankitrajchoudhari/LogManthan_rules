@@ -1,1 +1,1 @@
-{"dest_ip": "10.10.1.11", "dest_port": 20000, "msg": "LM-OT DNP3 Disable Unsolicited Responses (operator loses alarms)", "signature_id": 9100016, "src_ip": "10.10.1.66", "src_port": 59560, "timestamp": "2026-11-23T13:27:38.400051+0000"}
+{"dest_ip": "10.10.1.11", "dest_port": 20000, "metadata": {"event_code": 9100016, "product": {"name": "Suricata"}}, "msg": "LM-OT DNP3 Disable Unsolicited Responses (operator loses alarms)", "src_endpoint": {"ip": "10.10.1.66"}, "src_port": 59560, "timestamp": "2026-11-23T13:27:38.400051+0000"}

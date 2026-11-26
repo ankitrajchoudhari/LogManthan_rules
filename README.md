@@ -59,7 +59,7 @@ flowchart LR
     L --> P{"rule priority"}
     P -->|"priority 1 (Critical)"| C["Case opened"]
     P -->|"priority 2 / 3"| A["Alert stored, no case"]
-    L --> G["Sigma correlations<br/>by signature_id and src_ip"]
+    L --> G["Sigma correlations<br/>by metadata.event_code and src_endpoint.ip"]
     G -->|"recon then write,<br/>3+ Critical in 5 min"| H["Correlation hit (level: critical)"]
 ```
 
@@ -183,12 +183,12 @@ make sigma-test
   PASS: sigma check exited 0
   3 base rules, 2 correlation rules
 == Field names (sigma/pipelines/logmanthan-fields.yml) ==
-  PASS: every field the rules use is defined in the pipeline
+  PASS: every field the rules use is a LogManthan field defined in the pipeline
 == Sync with suricata/ot/lm-ot.rules ==
   PASS lm_ot_priority1 lists exactly the 13 priority:1 rules
 == Correlation scenarios (tests/sigma/scenarios.json) ==
   ...
-18/18 scenarios passed
+19/19 scenarios passed
 ```
 
 If all of that passes, your setup is correct.
@@ -658,25 +658,39 @@ More detail: [tuning/README.md](tuning/README.md).
 
 ## 11. Sigma correlations
 
-The Sigma rules never see network traffic. They read LM-OT **alerts** and match them by
-`signature_id`.
+The Sigma rules never see network traffic. They read LM-OT **alerts** and match them by SID,
+which LogManthan calls `metadata.event_code`.
 
 | Rule | Type | What it detects |
 |---|---|---|
 | `lm_ot_recon` | base | Recon alerts: 9100004, 9100006, 9100020 |
 | `lm_ot_write_control` | base | Write and control alerts: 9100001, 9100012 to 9100015 |
 | `lm_ot_priority1` | base | Every priority 1 LM-OT rule (13 SIDs) |
-| `lm_ot_recon_then_write` | correlation, `temporal_ordered` | Recon **then** write/control from the same `src_ip` within **10 minutes** |
-| `lm_ot_priority1_burst` | correlation, `event_count` | **3 or more** priority 1 alerts from the same `src_ip` within **5 minutes** |
+| `lm_ot_recon_then_write` | correlation, `temporal_ordered` | Recon **then** write/control from the same `src_endpoint.ip` within **10 minutes** |
+| `lm_ot_priority1_burst` | correlation, `event_count` | **3 or more** priority 1 alerts from the same `src_endpoint.ip` within **5 minutes** |
 
 Both correlations are `level: critical`. The base rules are only building blocks, since Suricata
 already raises those alerts.
 
 ### Field names
 
-The rules use logical field names (`signature_id`, `src_ip`). The real LogManthan names are not
-confirmed yet, so they are defined in one place only:
-`sigma/pipelines/logmanthan-fields.yml`. The test fails if a rule uses a field that file does not list.
+The rules use LogManthan's own field names, because LogManthan loads the rules as they are:
+
+| Suricata `eve.json` | LogManthan | Used for |
+|---|---|---|
+| `alert.signature_id` | `metadata.event_code` | Which LM-OT rule fired (the SID) |
+| `src_ip` | `src_endpoint.ip` | Grouping the correlations by source host |
+| (set by LogManthan) | `metadata.product.name` | Every base rule requires `Suricata` |
+
+The `metadata.product.name: Suricata` condition matters: Wazuh rule IDs are stored in the same
+`metadata.event_code` field, so without it a Wazuh event with code 9100001 would count as an LM-OT
+alert. The `wazuh_same_event_code` scenario proves that such events match no rule.
+
+The mapping is defined in one place, `sigma/pipelines/logmanthan-fields.yml`. The test fails if a rule
+uses a field that file does not list, or if a base rule leaves out the product condition.
+
+Verified by Rajeev on LogManthan's Sigma engine: 36/36 checks match (the 18 lab scenarios, two
+correlations each).
 
 ### Running the tests
 
@@ -686,16 +700,10 @@ make sigma-test
 make sigma-events CHECK=1        # test events still match a fresh Suricata replay
 ```
 
-`make sigma-test` runs `sigma check`, checks the field names, checks that `lm_ot_priority1` lists
-exactly the priority 1 rules in `lm-ot.rules`, and runs 18 correlation scenarios built from real lab
-alerts (inside and outside each time window, wrong order, a different host, baselines).
-
-### Open items
-
-- **TODO(rajeev):** confirm the field names and the logsource (`product: suricata`, `service: alert`)
-  in `sigma/pipelines/logmanthan-fields.yml`.
-- **TODO(rajeev):** replay `tests/sigma/events/` through LogManthan's own Sigma engine. The scenario test
-  uses a small reference evaluator, not LogManthan's engine.
+`make sigma-test` runs `sigma check`, checks the field names and the product condition, checks that
+`lm_ot_priority1` lists exactly the priority 1 rules in `lm-ot.rules`, and runs 19 correlation
+scenarios: 18 built from real lab alerts (inside and outside each time window, wrong order, a
+different host, baselines) and one with Wazuh events that share LM-OT event codes.
 
 More detail: [sigma/README.md](sigma/README.md).
 
@@ -782,13 +790,13 @@ make sigma-test
   FAIL lm_ot_priority1 differs from priority:1 rules: missing [9100018], extra []
 ```
 
-Add `- 9100018` to the `signature_id` list in `sigma/rules/base/lm_ot_priority1.yml`. If the rule is
+Add `- 9100018` to the `metadata.event_code` list in `sigma/rules/base/lm_ot_priority1.yml`. If the rule is
 recon or write/control, add it to `lm_ot_recon.yml` or `lm_ot_write_control.yml` as well.
 
 ```text
   PASS lm_ot_priority1 lists exactly the 14 priority:1 rules
 ...
-18/18 scenarios passed
+19/19 scenarios passed
 ```
 
 ### Step 7: prove it fires (add a capture and a fixture)

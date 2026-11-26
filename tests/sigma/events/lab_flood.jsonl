@@ -1,2 +1,2 @@
-{"dest_ip": "10.10.1.66", "dest_port": 36946, "msg": "SURICATA Modbus Data mismatch", "signature_id": 2250008, "src_ip": "10.10.1.10", "src_port": 502, "timestamp": "2026-11-23T07:01:39.622234+0000"}
-{"dest_ip": "10.10.1.10", "dest_port": 502, "msg": "LM-OT Modbus request flood from unknown host", "signature_id": 9100007, "src_ip": "10.10.1.66", "src_port": 36976, "timestamp": "2026-11-23T07:01:39.730088+0000"}
+{"dest_ip": "10.10.1.66", "dest_port": 36946, "metadata": {"event_code": 2250008, "product": {"name": "Suricata"}}, "msg": "SURICATA Modbus Data mismatch", "src_endpoint": {"ip": "10.10.1.10"}, "src_port": 502, "timestamp": "2026-11-23T07:01:39.622234+0000"}
+{"dest_ip": "10.10.1.10", "dest_port": 502, "metadata": {"event_code": 9100007, "product": {"name": "Suricata"}}, "msg": "LM-OT Modbus request flood from unknown host", "src_endpoint": {"ip": "10.10.1.66"}, "src_port": 36976, "timestamp": "2026-11-23T07:01:39.730088+0000"}
