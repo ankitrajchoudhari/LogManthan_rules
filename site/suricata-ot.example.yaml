@@ -1,0 +1,81 @@
+%YAML 1.1
+---
+# LogManthan OT: per-client Suricata settings for suricata/ot/lm-ot.rules (Suricata 8.0.7).
+#
+# This is NOT a full suricata.yaml. It is loaded on top of the client's existing config:
+#   - add   include: suricata-ot.yaml   at the end of suricata.yaml, or
+#   - start Suricata with   --include /etc/suricata/suricata-ot.yaml
+# See README "Deploying to a client".
+#
+# Why every key is written in dotted form (app-layer.protocols.modbus.enabled: yes) instead of
+# nested blocks: Suricata replaces a whole top-level section when an included file defines it
+# ("Configuration node 'app-layer' redefined"), which would wipe the client's other app-layer,
+# stream and vars settings. Dotted keys change only that one value and keep everything else.
+#
+# Every address below is from the documentation ranges (192.0.2.0/24, 198.51.100.0/24,
+# 203.0.113.0/24) and is an EXAMPLE ONLY. Replace each one with the client's real values on the
+# sensor. Never commit real client addresses to this repository.
+#
+# The test suite loads this file exactly like this on top of Suricata's default config
+# (suricata -T with lm-ot.rules, then lab replays), so it cannot go stale.
+
+# ---------------------------------------------------------------- address groups
+# PLCs, RTUs and other field devices (Purdue levels 0-1). Destination of every LM-OT rule.
+vars.address-groups.OT_NET: "[192.0.2.0/25]"
+
+# Hosts allowed to WRITE to PLCs: HMIs, SCADA servers, engineering workstations.
+# Modbus writes (9100001), the connection-scan rule (9100006) and the unknown-host flood rule
+# (9100007) ignore these hosts.
+vars.address-groups.OT_WRITERS: "[203.0.113.10,203.0.113.11,203.0.113.20]"
+
+# Engineering workstations, allowed to program and discover devices
+# (device identification 9100004, ENIP List Identity 9100020, S7 PLC STOP 9100030 ignore them).
+vars.address-groups.ENG_WS: "[203.0.113.20]"
+
+# SCADA masters allowed to send DNP3 control commands (9100012 to 9100016 ignore them).
+vars.address-groups.DNP3_MASTERS: "[203.0.113.11]"
+
+# Corporate IT networks (Purdue levels 4-5). A remote session from here into OT_NET opens a case
+# (9100040).
+vars.address-groups.IT_NET: "[198.51.100.0/24]"
+
+# Approved admin/vendor jump hosts allowed to open remote sessions (SSH, SMB, RDP, VNC) into OT.
+# 9100040 uses [$IT_NET,!$OT_JUMP_HOSTS], and Suricata will not load the rule if this group is
+# undefined. A site WITHOUT jump hosts keeps an unused placeholder, chosen OUTSIDE IT_NET and
+# OT_NET so that it excludes nothing, as below (192.0.2.254). A site WITH jump hosts lists them
+# instead, for example "[198.51.100.10]".
+vars.address-groups.OT_JUMP_HOSTS: "[192.0.2.254]"
+
+# ---------------------------------------------------------------- OT protocol parsers
+# The Modbus, DNP3 and ENIP parsers are OFF by default in Suricata 8.0.7. Without these lines the
+# Modbus, DNP3 and ENIP rules do not even load ("protocol modbus cannot be used in a signature"),
+# and the site gets no OT alerts at all.
+app-layer.protocols.modbus.enabled: yes
+app-layer.protocols.modbus.detection-ports.dp: 502
+app-layer.protocols.dnp3.enabled: yes
+app-layer.protocols.dnp3.detection-ports.dp: 20000
+app-layer.protocols.enip.enabled: yes
+app-layer.protocols.enip.detection-ports.dp: 44818
+app-layer.protocols.enip.detection-ports.sp: 44818
+# Not set here on purpose: app-layer.protocols.modbus.stream-depth. It is 0 ("track completely")
+# in the default config, but on 8.0.7 it did not lift the 1 MiB limit in our tests; the global
+# depth below is what matters.
+
+# ---------------------------------------------------------------- stream reassembly depth
+# Modbus and DNP3 are inspected only for the first stream.reassembly.depth bytes of each
+# connection direction. The default 1 MiB is reached by a busy master within minutes to hours,
+# after which writes and restarts on that connection are missed (README "Stream reassembly depth").
+# 10mb is the starting value for OT sites; size it from the client's poll rates. It is global (all
+# TCP traffic), so it costs memory and CPU: watch stream.reassembly.memcap and the
+# tcp.reassembly_memuse and tcp.segment_memcap_drop counters. NEVER set it to 0 (unlimited).
+stream.reassembly.depth: 10mb
+
+# ---------------------------------------------------------------- safety
+# LM-OT rules never use Lua; keep Lua rules off (Suricata 8 allows them by default).
+security.lua.allow-rules: false
+
+# ---------------------------------------------------------------- tuning
+# Rate limits for Suricata's bundled Modbus/DNP3 event rules are in tuning/threshold.config. If the
+# site has no threshold file of its own, copy it to the sensor and uncomment the next line;
+# otherwise merge its lines into the site's existing file (see tuning/README.md).
+# threshold-file: /etc/suricata/lm-ot-threshold.config

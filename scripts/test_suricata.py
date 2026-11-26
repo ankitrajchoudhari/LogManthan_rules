@@ -6,6 +6,9 @@
 3. Dynamic   replay each fixture capture and check which LM SIDs fire.
 4. Tuning    replay with Suricata's bundled Modbus/DNP3 event rules, without and with
              tuning/threshold.config, and check event-alert volume stays within agreed limits.
+5. Site      load site/suricata-ot.example.yaml the way a client sensor does (Suricata's default
+             config + --include, no other settings): suricata -T must pass with no warnings, and
+             lab replays must alert, proving the template enables the parsers and raises the depth.
 
 Standard library only. Suricata binary comes from env var SURICATA (default "suricata"); the
 bundled event rules are taken from that binary's own install (`suricata --build-info`).
@@ -32,6 +35,12 @@ FIXTURES = ROOT / "tests" / "suricata" / "fixtures.json"
 SIDS_MD = ROOT / "SIDS.md"
 LAB_CLASSIFICATION = ROOT / "lab" / "suricata" / "classification.config"
 TUNING = ROOT / "tests" / "suricata" / "tuning.json"
+SITE_TEMPLATE = ROOT / "site" / "suricata-ot.example.yaml"
+# (fixture id, LM SID that must fire, why it depends on the template)
+SITE_REPLAYS = [
+    ("lab_write", 9100001, "Modbus parser enabled by the template"),
+    ("lab_dnp3_long_session", 9100010, "DNP3 parser and stream.reassembly.depth raised by the template"),
+]
 CACHE = ROOT / ".cache" / "pcaps"
 SURICATA = os.environ.get("SURICATA", "suricata")
 
@@ -413,6 +422,41 @@ def tuning_check(fixtures_data, lm_rules_text, tmpdir):
     return ok_all
 
 
+def site_template_check(fixtures_data, rules, tmpdir):
+    """The client template on top of Suricata's default config, with nothing else set."""
+    ok = True
+    base = [SURICATA, "--include", str(SITE_TEMPLATE)]
+    p = subprocess.run(base + ["-T", "-S", str(rules), "-l", str(tmpdir)], capture_output=True, text=True)
+    warnings, ignored = find_warnings(p.stdout + p.stderr)
+    if p.returncode != 0 or warnings:
+        print(f"  FAIL suricata -T --include {SITE_TEMPLATE.relative_to(ROOT).as_posix()} exited {p.returncode}")
+        for w in warnings:
+            print("    " + w)
+        ok = False
+    else:
+        print(f"  PASS suricata -T with default config + --include {SITE_TEMPLATE.relative_to(ROOT).as_posix()}"
+              f" (0 warnings, {len(ignored)} ignored)")
+    by_id = {fx["id"]: fx for fx in fixtures_data["fixtures"]}
+    for fid, sid, why in SITE_REPLAYS:
+        fx = by_id[fid]
+        # Only the lab address groups are overridden (the template has documentation addresses).
+        sets = [a for k, v in fixtures_data["var_sets"][fx["vars"]].items()
+                for a in ("--set", f"vars.address-groups.{k}={v}")]
+        with tempfile.TemporaryDirectory() as logdir:
+            cmd = base + ["--runmode", "single", "-r", str(fetch(fx)), "-k", "none", "-S", str(rules),
+                          "-l", logdir] + sets
+            r = subprocess.run(cmd, capture_output=True, text=True)
+            warnings, _ = find_warnings(r.stdout + r.stderr)
+            eve = Path(logdir) / "eve.json"
+            events = [json.loads(x) for x in eve.read_text(encoding="utf-8").splitlines()] if eve.exists() else []
+        got = sorted(lm_sids(events))
+        good = r.returncode == 0 and not warnings and got == [sid]
+        ok &= good
+        print(f"  {'PASS' if good else 'FAIL'} {fid} with the template: expected [{sid}] got={got}  ({why})"
+              + (f"  warnings: {warnings[:2]}" if warnings else ""))
+    return ok
+
+
 def main():
     failed = False
 
@@ -494,6 +538,10 @@ def main():
             print("  PASS: event-alert volume within limits, nothing silenced, LM-OT SIDs unchanged")
         else:
             print("  FAIL: tuning check")
+            failed = True
+
+        print("== Site template (site/suricata-ot.example.yaml on Suricata's default config) ==")
+        if not site_template_check(data, rules, tmpdir):
             failed = True
 
     sys.exit(1 if failed else 0)

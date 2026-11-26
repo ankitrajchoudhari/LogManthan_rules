@@ -19,17 +19,18 @@ Maintainer: Ankit Raj Choudhari.
 4. [Prerequisites](#4-prerequisites)
 5. [Quick start (5 minutes)](#5-quick-start-5-minutes)
 6. [The rules](#6-the-rules)
-7. [How the tests work](#7-how-the-tests-work)
-8. [The OT lab, step by step](#8-the-ot-lab-step-by-step)
-9. [Cyber-range exercise](#9-cyber-range-exercise)
-10. [Tuning Suricata's built-in Modbus/DNP3 alerts](#10-tuning-suricatas-built-in-modbusdnp3-alerts)
-11. [Sigma correlations](#11-sigma-correlations)
-12. [How to add a new rule](#12-how-to-add-a-new-rule)
-13. [CI](#13-ci)
-14. [How changes reach this repository](#14-how-changes-reach-this-repository)
-15. [Security rules](#15-security-rules)
-16. [Troubleshooting and FAQ](#16-troubleshooting-and-faq)
-17. [Credits and licence](#17-credits-and-licence)
+7. [Deploying to a client](#7-deploying-to-a-client)
+8. [How the tests work](#8-how-the-tests-work)
+9. [The OT lab, step by step](#9-the-ot-lab-step-by-step)
+10. [Cyber-range exercise](#10-cyber-range-exercise)
+11. [Tuning Suricata's built-in Modbus/DNP3 alerts](#11-tuning-suricatas-built-in-modbusdnp3-alerts)
+12. [Sigma correlations](#12-sigma-correlations)
+13. [How to add a new rule](#13-how-to-add-a-new-rule)
+14. [CI](#14-ci)
+15. [How changes reach this repository](#15-how-changes-reach-this-repository)
+16. [Security rules](#16-security-rules)
+17. [Troubleshooting and FAQ](#17-troubleshooting-and-faq)
+18. [Credits and licence](#18-credits-and-licence)
 
 ---
 
@@ -107,6 +108,7 @@ Facts to keep in mind:
 | `lab/tools/alerts.py` | Prints and checks LM-OT alerts from `lab/out/eve.json`. |
 | `lab/tools/record_fixtures.sh` | Re-records all lab test captures. |
 | `lab/README.md` | Lab reference (topology, hardening). |
+| `site/suricata-ot.example.yaml` | Per-client Suricata settings: address groups, OT parsers, stream depth (section 7). |
 | `Makefile` | Every command you need: tests, Sigma, lab. |
 | `.github/workflows/test.yml` | CI: gitleaks, then all tests in the pinned Suricata 8.0.7 container. |
 | `.pre-commit-config.yaml` | gitleaks as a pre-commit hook. |
@@ -174,6 +176,10 @@ that it takes about 45 seconds. The end of the output should look like this (sho
   ...
   total event alerts: 31365 before -> 27 after tuning
   PASS: event-alert volume within limits, nothing silenced, LM-OT SIDs unchanged
+== Site template (site/suricata-ot.example.yaml on Suricata's default config) ==
+  PASS suricata -T with default config + --include site/suricata-ot.example.yaml (0 warnings, 0 ignored)
+  PASS lab_write with the template: expected [9100001] got=[9100001]  (Modbus parser enabled by the template)
+  PASS lab_dnp3_long_session with the template: expected [9100010] got=[9100010]  (DNP3 parser and stream.reassembly.depth raised by the template)
 ```
 
 Then the Sigma tests:
@@ -266,22 +272,12 @@ Rules never contain real IP addresses. They use six address groups, which each s
 | `IT_NET` | Corporate IT networks (Purdue levels 4-5) | 9100040 | `[10.10.1.128/25]` |
 | `OT_JUMP_HOSTS` | Approved admin/vendor jump hosts allowed to open remote sessions (SSH, SMB, RDP, VNC) into OT | 9100040 (excluded) | `[10.10.1.131]` |
 
-A site sets them like this (example values only):
+A site sets them in [site/suricata-ot.example.yaml](site/suricata-ot.example.yaml), together with the
+OT parsers and the stream depth; [section 7](#7-deploying-to-a-client) walks through it. For example:
 
 ```yaml
-vars:
-  address-groups:
-    OT_NET: "[192.0.2.0/24]"
-    OT_WRITERS: "[192.0.2.50,192.0.2.51]"
-    ENG_WS: "[192.0.2.60]"
-    DNP3_MASTERS: "[192.0.2.70]"
-    IT_NET: "[198.51.100.0/24]"
-    OT_JUMP_HOSTS: "[198.51.100.10]"
-app-layer:
-  protocols:
-    modbus: { enabled: yes }
-    dnp3:   { enabled: yes }
-    enip:   { enabled: yes }
+vars.address-groups.OT_NET: "[192.0.2.0/25]"
+vars.address-groups.OT_JUMP_HOSTS: "[192.0.2.254]"   # placeholder when the site has no jump hosts
 ```
 
 If `OT_WRITERS` or `DNP3_MASTERS` is too narrow, legitimate HMIs and masters will open cases. If it is
@@ -293,10 +289,144 @@ matters more than any single rule.
 SIDs 9100001 to 9199999 are reserved for these rules. A SID is **never reused**. When a rule is
 retired, mark its row in `SIDS.md` as *retired* instead of deleting it.
 
-## 7. How the tests work
+## 7. Deploying to a client
+
+Each client sensor needs three things: the rules, the client's own address groups, and a few
+Suricata settings that are off or too small by default. All of the settings are in one file,
+[site/suricata-ot.example.yaml](site/suricata-ot.example.yaml), which is loaded on top of the
+client's existing `suricata.yaml`. The commands below were run on a stock Suricata 8.0.7
+(`jasonish/suricata:8.0.7`) with its own `/etc/suricata/suricata.yaml`.
+
+### Step 1: collect the addresses from the client
+
+Ask the client (or their OT engineer) for these lists. Use exact hosts where you can, subnets only
+where every host in them really belongs.
+
+| Group | Ask the client for | If they have none |
+|---|---|---|
+| `OT_NET` | Subnets of PLCs, RTUs, field devices (Purdue levels 0-1) | Required; no rule works without it |
+| `OT_WRITERS` | Every HMI, SCADA server and engineering workstation that writes to PLCs | Required |
+| `ENG_WS` | Engineering workstations that program or discover devices | Use a placeholder documentation address |
+| `DNP3_MASTERS` | SCADA masters that send DNP3 control commands | Use a placeholder documentation address |
+| `IT_NET` | Corporate IT subnets (Purdue levels 4-5) | Required |
+| `OT_JUMP_HOSTS` | Approved admin/vendor jump hosts that open SSH, SMB, RDP or VNC sessions into OT | Keep the placeholder `[192.0.2.254]` |
+
+Every group must be defined, or Suricata refuses to load the rules that use it. A placeholder must
+be an unused address outside the client's `IT_NET` and `OT_NET`, so that it excludes nothing. The
+documentation range 192.0.2.0/24 is never used on real networks.
+
+### Step 2: copy the template and the rules to the sensor
+
+```sh
+cp site/suricata-ot.example.yaml /etc/suricata/suricata-ot.yaml
+cp suricata/ot/lm-ot.rules /var/lib/suricata/rules/lm-ot.rules
+```
+
+Add `lm-ot.rules` to `rule-files:` in the client's `suricata.yaml` (or to their rule-update tooling).
+
+### Step 3: fill in the address groups
+
+Edit `/etc/suricata/suricata-ot.yaml` and replace every example address with the client's values
+from step 1. The real values stay on the sensor; never commit them to this repository.
+
+### Step 4: check the parser and depth lines
+
+Leave these lines as they are in the template:
+
+- `app-layer.protocols.modbus.enabled: yes`, and the same for `dnp3` and `enip`. They are off by
+  default in Suricata 8.0.7; without them the Modbus, DNP3 and ENIP rules do not even load and the
+  client gets no OT alerts.
+- `stream.reassembly.depth: 10mb`. Start with 10mb, then size it from the client's poll rates (see
+  [Stream reassembly depth](#stream-reassembly-depth)). It is global, so watch memory and CPU.
+  Never set it to 0.
+
+The template writes every setting as a dotted key (`app-layer.protocols.modbus.enabled: yes`). This
+matters: if an included file has a nested `app-layer:` block, Suricata replaces the client's whole
+`app-layer` section with it, and the client's other protocol, stream and variable settings are lost.
+
+### Step 5: load the template
+
+Add one line at the end of the client's `suricata.yaml`:
+
+```sh
+echo "include: suricata-ot.yaml" >> /etc/suricata/suricata.yaml
+```
+
+(Or start Suricata with `--include /etc/suricata/suricata-ot.yaml`.)
+
+### Step 6: rate-limit the bundled Modbus/DNP3 event rules
+
+If the client has no threshold file of their own, copy `tuning/threshold.config` to
+`/etc/suricata/lm-ot-threshold.config` and uncomment the `threshold-file:` line at the end of the
+template. If they already have one, merge its lines into it instead (a SID may appear only once).
+See [Tuning](#11-tuning-suricatas-built-in-modbusdnp3-alerts).
+
+### Step 7: check the configuration
+
+```sh
+suricata -T -c /etc/suricata/suricata.yaml -S /var/lib/suricata/rules/lm-ot.rules
+```
+
+```text
+Info: conf-yaml-loader: Including configuration file suricata-ot.yaml.
+i: suricata: This is Suricata version 8.0.7 RELEASE running in SYSTEM mode
+i: suricata: Configuration provided was successfully loaded. Exiting.
+```
+
+Any `W:` or `E:` line must be fixed before going live. To see what Suricata actually uses:
+
+```sh
+suricata -c /etc/suricata/suricata.yaml --dump-config | grep -E "^vars.address-groups.(OT_|ENG_WS|DNP3_MASTERS|IT_NET)|^app-layer.protocols.(modbus|dnp3|enip).enabled|^stream.reassembly.depth"
+```
+
+```text
+vars.address-groups.OT_NET = [192.0.2.0/25]
+vars.address-groups.OT_WRITERS = [203.0.113.10,203.0.113.11,203.0.113.20]
+vars.address-groups.ENG_WS = [203.0.113.20]
+vars.address-groups.DNP3_MASTERS = [203.0.113.11]
+vars.address-groups.IT_NET = [198.51.100.0/24]
+vars.address-groups.OT_JUMP_HOSTS = [192.0.2.254]
+app-layer.protocols.modbus.enabled = yes
+app-layer.protocols.dnp3.enabled = yes
+app-layer.protocols.enip.enabled = yes
+stream.reassembly.depth = 10mb
+```
+
+(Shown with the template's example addresses; on a client sensor you should see their values.)
+
+### Step 8: replay one lab capture to confirm alerts
+
+Copy `tests/suricata/lab/lab_write.pcap` to the sensor and replay it with the client's config. The
+capture uses lab addresses, so only for this check override the two groups it needs:
+
+```sh
+mkdir -p /tmp/lm-check
+suricata -c /etc/suricata/suricata.yaml -S /var/lib/suricata/rules/lm-ot.rules -k none \
+  -l /tmp/lm-check -r lab_write.pcap \
+  --set "vars.address-groups.OT_NET=[10.10.1.10,10.10.1.11]" \
+  --set "vars.address-groups.OT_WRITERS=[10.10.1.20]"
+grep -o '"signature":"LM-OT[^"]*"' /tmp/lm-check/eve.json
+```
+
+```text
+"signature":"LM-OT Modbus write from unauthorised host"
+"signature":"LM-OT Modbus write from unauthorised host"
+```
+
+Two alerts (the capture has two writes) means the parsers, rules and config work together. No
+output means a parser is still disabled or a group is wrong: go back to step 4.
+
+### How this is tested
+
+`make test` has a "Site template" stage that loads `site/suricata-ot.example.yaml` exactly like this,
+on Suricata's default config with nothing else set: `suricata -T` must pass with no warnings,
+`lab_write` must raise 9100001 (parsers on) and `lab_dnp3_long_session` must raise 9100010 (depth
+raised). A template that loses a parser line or the depth fails the build.
+
+## 8. How the tests work
 
 `make test` runs `scripts/test_suricata.py` inside the Suricata 8.0.7 container (the same image as
-CI, pinned by digest). It has four stages. **Any Suricata warning or error line fails the run**, even
+CI, pinned by digest). It has five stages. **Any Suricata warning or error line fails the run**, even
 if Suricata exits 0.
 
 | Stage | What it checks | Fails when |
@@ -305,6 +435,7 @@ if Suricata exits 0.
 | 2. Static | `suricata -T` on all rule files | Any warning or error. The only allowed exceptions are listed, with a reason, in `IGNORED_WARNINGS` in the script. |
 | 3. Dynamic | Replays every capture in `fixtures.json` | Wrong SIDs fire, expected SIDs do not fire, a SHA-256 does not match, or Suricata warns |
 | 4. Tuning | Replays every capture with the bundled event rules, with and without `tuning/threshold.config` | Event alerts go above the limit in `tuning.json`, an event is silenced completely, LM-OT SIDs change, or the Suricata version differs from the one the limits were measured on |
+| 5. Site template | Loads `site/suricata-ot.example.yaml` on Suricata's default config, then replays `lab_write` and `lab_dnp3_long_session` | `suricata -T` warns, or the replays do not alert (a parser line or the raised depth is missing) |
 
 ### The fixture format
 
@@ -357,7 +488,7 @@ busy real master does not trigger the flood rules.
 
 - **External** captures come from ITI ICS-Security-Tools (CC BY 4.0). They are fetched by URL and
   pinned by SHA-256, so the repository never stores third-party files.
-- **Lab** captures are recorded from our own Docker lab (`make record-fixtures`, see section 8) and
+- **Lab** captures are recorded from our own Docker lab (`make record-fixtures`, see section 9) and
   are the only pcaps committed (`tests/suricata/lab/`: 15 `.pcap` files and 2 `.pcap.gz` long-session
   captures, which are 16.4 MB and 9.9 MB unpacked).
 
@@ -374,7 +505,7 @@ use `--runmode single`, so every run gives the same result.
 - `make sigma-events CHECK=1` checks that the Sigma test events still match a fresh Suricata replay
   of the lab captures. CI runs this too.
 
-## 8. The OT lab, step by step
+## 9. The OT lab, step by step
 
 ### Topology
 
@@ -567,7 +698,7 @@ The lab generates attack traffic, so it is locked down:
 
 More detail is in [lab/README.md](lab/README.md).
 
-## 9. Cyber-range exercise
+## 10. Cyber-range exercise
 
 The lab doubles as a training exercise. The instructor starts the lab, runs the scenarios in any
 order and does not say which. The trainee only gets `make alerts` and answers the tasks below.
@@ -629,7 +760,7 @@ Reset between rounds with `make lab-down && make lab-up`.
     alert because of `threshold: type limit, track by_src, count 1, seconds 3600`: one case per host
     per hour, not twenty.
 
-## 10. Tuning Suricata's built-in Modbus/DNP3 alerts
+## 11. Tuning Suricata's built-in Modbus/DNP3 alerts
 
 LogManthan's Suricata also loads the event rules that come with Suricata: `modbus-events.rules`
 (SIDs 2250001-2250009) and `dnp3-events.rules` (SIDs 2270000-2270007). They flag protocol anomalies,
@@ -749,7 +880,7 @@ traffic, including large file transfers and backups, and can exhaust the reassem
 
 More detail: [tuning/README.md](tuning/README.md).
 
-## 11. Sigma correlations
+## 12. Sigma correlations
 
 The Sigma rules never see network traffic. They read LM-OT **alerts** and match them by SID,
 which LogManthan calls `metadata.event_code`.
@@ -801,7 +932,7 @@ different host, baselines) and one with Wazuh events that share LM-OT event code
 
 More detail: [sigma/README.md](sigma/README.md).
 
-## 12. How to add a new rule
+## 13. How to add a new rule
 
 The steps below were run for a real example: a rule for DNP3 **Stop Application** (function code 18),
 which an attacker could use to stop an application on an outstation.
@@ -931,7 +1062,7 @@ git push -u origin rule/9100018-dnp3-stop-app
 
 Open a pull request into `main`. CI runs on it and the reviewer can see green or red before merging.
 
-## 13. CI
+## 14. CI
 
 `.github/workflows/test.yml` runs on **every push and every pull request**:
 
@@ -939,7 +1070,7 @@ Open a pull request into `main`. CI runs on it and the reviewer can see green or
 |---|---|
 | Checkout | Full history (`fetch-depth: 0`), so gitleaks can scan every commit. |
 | Gitleaks | gitleaks 8.30.1, downloaded and checked against a pinned SHA-256, scans the full history for secrets. |
-| Suricata tests | `scripts/test_suricata.py` inside `jasonish/suricata:8.0.7`, pinned by image digest (the production version). |
+| Suricata tests | `scripts/test_suricata.py` inside `jasonish/suricata:8.0.7`, pinned by image digest (the production version): lint, `suricata -T`, replays, tuning, and the client site template. |
 | Sigma events | `build_sigma_events.py --check` in the same image: the Sigma test events still match a fresh replay. |
 | Sigma tests | Sigma tools installed with `--require-hashes` from `sigma/requirements.txt`, then `scripts/test_sigma.py`. |
 
@@ -951,7 +1082,7 @@ Other details:
 
 A run takes about 45 seconds.
 
-## 14. How changes reach this repository
+## 15. How changes reach this repository
 
 Rules are developed and tested in the maintainer's working repository first. Only work that is
 green there comes here.
@@ -976,7 +1107,7 @@ In plain words:
 
 Commits keep their original author, so `git log` shows who wrote each change.
 
-## 15. Security rules
+## 16. Security rules
 
 - **No secrets.** Tokens, passwords, keys and `.env` files are never committed. gitleaks runs in the
   pre-commit hook and in CI over the whole history.
@@ -992,7 +1123,7 @@ Commits keep their original author, so `git log` shows who wrote each change.
 - **Reporting a problem.** Report it privately to the maintainer, Ankit Raj Choudhari. Never in a
   public issue. See [SECURITY.md](SECURITY.md).
 
-## 16. Troubleshooting and FAQ
+## 17. Troubleshooting and FAQ
 
 **`make test` fails with "failed to connect to the docker API" or "cannot find the file specified".**
 Docker Desktop is not running. Start it, wait until `docker info` answers, then try again.
@@ -1047,7 +1178,7 @@ Install it with `winget install ezwinports.make` and open a new terminal.
 **`make sigma-setup` fails with "python3 not found" on Windows.**
 Use `make sigma-setup PYTHON=python`.
 
-## 17. Credits and licence
+## 18. Credits and licence
 
 - **Rules and lab captures:** [Detection Rule License 1.1](LICENSE).
 - **ITI ICS-Security-Tools captures:** CC BY 4.0, by ITI. Downloaded at test time, not stored here,
