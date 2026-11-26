@@ -62,7 +62,7 @@ make lab-down
 | `modbus-long-session` | One connection: 1.1 MiB of pipelined FC1 read-coil polling (~4 min), then FC6 write HR0 | T0855, T0836 | none at default depth (9100001 with a raised depth) | 1 |
 | `it-remote` | From `it-host` 10.10.1.130: 10 rounds of SSH 22 + RDP 3389 to the PLC (refused; the rule matches the SYN) | T0886 | 9100040 once (threshold: once per source per hour) | 1 |
 | `jump-remote` | The same from `jump-host` 10.10.1.131 (`OT_JUMP_HOSTS`) | | none | |
-| `dnp3-long-session` | One connection: 1.1 MiB of pipelined class 1–3 polls (~1 min), then FC13 Cold Restart | T0816 | none at default depth (9100010 with a raised depth) | 1 |
+| `dnp3-long-session` | One connection: 1.1 MiB of class 1–3 polls, one at a time like a real master (a few minutes), then FC13 Cold Restart | T0816 | none at default depth (9100010 with a raised depth) | 1 |
 
 DNP3 scenarios target the outstation 10.10.1.11 by default and reuse the master's link address 1:
 DNP3 has no authentication without Secure Authentication, so only the source IP gives the attacker away.
@@ -141,8 +141,8 @@ unless Suricata decodes every flow as DNP3 with no anomaly events. The test
 runner replays them with the lab address groups and exact matching. Then update the `sha256` values in
 `tests/suricata/fixtures.json` with the ones the script prints.
 
-The two long-session captures (`modbus-long-session`, `dnp3-long-session`) are 16.4 MB and 8.8 MB, so
-the recorder stores them gzipped (`lab_*_long_session.pcap.gz`, 2.8 MB and 1.2 MB); the test runner
+The two long-session captures (`modbus-long-session`, `dnp3-long-session`) are 16.4 MB and 9.9 MB, so
+the recorder stores them gzipped (`lab_*_long_session.pcap.gz`, 2.8 MB and 1.8 MB); the test runner
 unpacks them into `.cache/`. The lab PLC (pymodbus) answers at most 20 pipelined requests at a time,
 which is why the Modbus scenario sends 20 per segment.
 

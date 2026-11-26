@@ -25,7 +25,8 @@ IT to OT remote sessions (run from the IT hosts, not from the attacker; `make at
 
 Long sessions (stream reassembly depth test): one TCP connection carries more than 1 MiB of normal
 polling from client to server (--bytes, default 1.1 MiB), then one control command on the SAME
-connection. Requests are pipelined (batches in one segment, paced) so no flood rule fires.
+connection. Modbus requests are pipelined 20 at a time and paced, so no flood rule fires; DNP3 polls
+are sent one at a time, each answered before the next, like a real master.
   modbus-long-session        FC1 read-coil polling, then FC6 write HR0     -> 9100001
   dnp3-long-session          class 1-3 event polls, then FC13 Cold Restart -> 9100010 only if
                              Suricata's global stream.reassembly.depth is above the session size
@@ -151,26 +152,18 @@ def modbus_long_session(target, args):
 
 
 def dnp3_long_session(target, args):
-    # Pipelined class 1-3 event polls (24-byte link frames), 50 per segment, ~20 segments/s,
-    # then a Cold Restart on the same TCP connection and DNP3 association.
+    # Class 1-3 event polls like a real master: one request at a time, each answered before the
+    # next is sent (pipelining more than 32 polls trips Suricata's DNP3 max-tx flood event, which a
+    # real master never would). Then a Cold Restart on the same TCP connection and association.
     session = dnp3.connect_master(target)
-    batch, sent = 50, 0
+    frame_len = len(dnp3.link_frame(bytes([0xC0, 0xC0, dnp3.READ]) + dnp3.EVENTS, 0, 0, True))
+    sent = polls = 0
     try:
         while sent < args.bytes:
-            frames = []
-            for _ in range(batch):
-                seq = session.aseq
-                session.aseq = (session.aseq + 1) & 0x0F
-                tpdu = bytes([0xC0 | session.tseq, 0xC0 | seq, dnp3.READ]) + dnp3.EVENTS
-                session.tseq = (session.tseq + 1) & 0x3F
-                frames.append(dnp3.link_frame(tpdu, session.remote, session.local, True))
-            buf = b"".join(frames)
-            session.sock.sendall(buf)
-            sent += len(buf)
-            for _ in range(batch):
-                session.recv_apdu()
-            time.sleep(1 / 20)
-        log(f"dnp3 long session: {sent} bytes of class 1-3 polling to {target} on one connection")
+            session.request(dnp3.READ, dnp3.EVENTS)
+            sent += frame_len
+            polls += 1
+        log(f"dnp3 long session: {polls} polls, {sent} bytes of class 1-3 polling to {target} on one connection")
         iin1, iin2, _ = session.request(dnp3.COLD_RESTART)
         log(f"DNP3 cold restart on the same connection: response IIN {iin1:02x} {iin2:02x}")
     finally:

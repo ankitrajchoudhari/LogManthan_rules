@@ -23,8 +23,7 @@
     "lab_flood": 1,
     "lab_hmi_normal": 1,
     "lab_flood_heavy": 1,
-    "lab_modbus_long_session": 2,
-    "lab_dnp3_long_session": 2
+    "lab_modbus_long_session": 2
   },
   "default_limit": 0
 }

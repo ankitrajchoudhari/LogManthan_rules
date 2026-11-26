@@ -38,9 +38,8 @@ Replays run single-threaded (`--runmode single`) so threshold counts are the sam
 | lab `lab_flood_heavy` | 3000 | 1 | 1 |
 | lab `lab_hmi_normal` (normal HMI, 130 s) | 127 | 1 | 1 |
 | lab `lab_modbus_long_session` (2250002 unsolicited response) | 15890 | 2 | 2 |
-| lab `lab_dnp3_long_session` (2270000 flooded) | 875 | 2 | 2 |
-| 20 other captures | 0 | 0 | 0 |
-| **Total** | **32240** | **29** | |
+| 23 other captures | 0 | 0 | 0 |
+| **Total** | **31365** | **27** | |
 
 Per SID on ITI ModbusTCP: unsolicited response 1765 → 2, invalid length 1006 → 2, invalid value 524 → 2,
 data mismatch 3036 → 13 (13 sources).
@@ -79,7 +78,7 @@ of polling, then one command on the same connection):
 | | Default (`stream.reassembly.depth` 1 MiB) | `stream.reassembly.depth=10mb` |
 |---|---|---|
 | Modbus FC6 write after 1,153,440 B of FC1 polling | 9100001 not raised | 9100001 raised |
-| DNP3 Cold Restart after 1,154,400 B of class polls | 9100010 not raised | 9100010 raised |
+| DNP3 Cold Restart after 1,153,440 B of class polls (48,060 polls) | 9100010 not raised | 9100010 raised |
 
 - Modbus and DNP3 are both limited by the **global** `stream.reassembly.depth`. DNP3 has no
   per-protocol setting; Modbus has `app-layer.protocols.modbus.stream-depth` (0 = "track it
@@ -87,9 +86,9 @@ of polling, then one command on the same connection):
 - After the limit, Modbus responses keep arriving while requests are no longer parsed, so
   `SURICATA Modbus unsolicited response` (2250002) fires on every response: 15890 times before
   tuning, 2 after. A burst of 2250002 on one long connection is a sign the limit was reached.
-- The DNP3 `Request flood detected` events (2270000) in `lab_dnp3_long_session` come from the scenario
-  itself: 50 polls outstanding at once, above Suricata's default DNP3 `max-tx` (32 open transactions);
-  with `max-tx=64` they drop from 875 to 7. They appear with or without the depth limit.
+- `lab_dnp3_long_session` polls like a real master (one request at a time) and raises no DNP3 event
+  alerts. An earlier recording kept 50 polls outstanding, more than Suricata's default DNP3 `max-tx`
+  of 32 open transactions, and raised `Request flood detected` (2270000); it was re-recorded.
 - A site whose OT masters keep one connection open for a long time can raise the **global**
   `stream.reassembly.depth`. It applies to all TCP traffic, so it costs memory and CPU on the whole
   sensor (Rajeev's point); measure before and after. Never set it to 0 (unlimited).

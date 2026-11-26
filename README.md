@@ -172,7 +172,7 @@ that it takes about 45 seconds. The end of the output should look like this (sho
 32/32 dynamic tests passed
 == Tuning (bundled Modbus/DNP3 event rules + tuning/threshold.config) ==
   ...
-  total event alerts: 32240 before -> 29 after tuning
+  total event alerts: 31365 before -> 27 after tuning
   PASS: event-alert volume within limits, nothing silenced, LM-OT SIDs unchanged
 ```
 
@@ -359,7 +359,7 @@ busy real master does not trigger the flood rules.
   pinned by SHA-256, so the repository never stores third-party files.
 - **Lab** captures are recorded from our own Docker lab (`make record-fixtures`, see section 8) and
   are the only pcaps committed (`tests/suricata/lab/`: 15 `.pcap` files and 2 `.pcap.gz` long-session
-  captures, which are 16.4 MB and 8.8 MB unpacked).
+  captures, which are 16.4 MB and 9.9 MB unpacked).
 
 ### Why replays run single-threaded
 
@@ -449,7 +449,7 @@ Run one scenario, then check its alert. `--src 10.10.1.66` limits the output to 
 | `make attack SCENARIO=modbus-long-session` | One connection: 1.1 MiB of FC1 read-coil polling (about 4 minutes), then an FC6 write | **none** at default depth; 9100001 with a raised depth | 1 |
 | `make attack SCENARIO=it-remote` | From `it-host` 10.10.1.130: 10 rounds of SSH (22) and RDP (3389) to the PLC, 20 connection attempts | 9100040, **once** | 1 |
 | `make attack SCENARIO=jump-remote` | The same from `jump-host` 10.10.1.131, an approved jump host | none | |
-| `make attack SCENARIO=dnp3-long-session` | One connection: 1.1 MiB of class 1-3 polls (about 1 minute), then an FC13 Cold Restart | **none** at default depth; 9100010 with a raised depth | 1 |
+| `make attack SCENARIO=dnp3-long-session` | One connection: 1.1 MiB of class 1-3 polls, one at a time like a real master (a few minutes), then an FC13 Cold Restart | **none** at default depth; 9100010 with a raised depth | 1 |
 
 Example, the write attack:
 
@@ -654,29 +654,24 @@ Measured by `make test` on Suricata 8.0.7:
 | lab `lab_flood_heavy` | 3000 | 1 | 1 |
 | lab `lab_hmi_normal` (130 s of normal HMI) | 127 | 1 | 1 |
 | lab `lab_modbus_long_session` (2250002 unsolicited response, see below) | 15890 | 2 | 2 |
-| lab `lab_dnp3_long_session` (2270000 flooded, see below) | 875 | 2 | 2 |
-| 20 other captures | 0 | 0 | 0 |
-| **Total** | **32240** | **29** | |
+| 23 other captures | 0 | 0 | 0 |
+| **Total** | **31365** | **27** | |
 
 ```text
   PASS iti_modbustcp                            6331     19     19  2250002:2 2250003:2 2250006:2 2250008:13
   PASS bro_modbus_modbus                        5017      3      3  2250008:2 2250009:1
   ...
   PASS lab_modbus_long_session                 15890      2      2  2250002:2
-  PASS lab_dnp3_long_session                     875      2      2  2270000:2
-  total event alerts: 32240 before -> 29 after tuning
+  PASS lab_dnp3_long_session                       0      0      0  -
+  total event alerts: 31365 before -> 27 after tuning
 ```
 
-The two long-session captures raise event alerts for different reasons:
+Only the Modbus long session raises event alerts; the DNP3 one, polled like a real master, raises none:
 
 - **Modbus `unsolicited response` (2250002)** appears only at the default depth. Once the request
   side of the connection passes 1 MiB, Suricata stops seeing the requests but still sees the
   responses, so every response looks unsolicited. With the depth raised to 10 MB there are none.
   On a real network, a burst of this event on one long connection is a sign that depth was reached.
-- **DNP3 `Request flood detected` (2270000)** appears with and without the depth limit. It comes
-  from the lab scenario itself: it keeps 50 polls outstanding at once, more than Suricata's default
-  DNP3 `max-tx` of 32 open transactions per flow. With `app-layer.protocols.dnp3.max-tx=64` it drops
-  from 875 to 7. A real master waits for each response, so this is a test artefact, not a finding.
 
 ### The "Data mismatch" problem (sawp-modbus issue #13)
 
@@ -712,7 +707,7 @@ little over 1.1 MiB of normal polling and then one command on the same connectio
 | Capture | Default settings | `stream.reassembly.depth=10mb` |
 |---|---|---|
 | `lab_modbus_long_session`: 1,153,440 B of FC1 polling, then FC6 write | 9100001 **not raised** | 9100001 raised |
-| `lab_dnp3_long_session`: 1,154,400 B of class 1-3 polls, then FC13 Cold Restart | 9100010 **not raised** | 9100010 raised |
+| `lab_dnp3_long_session`: 1,153,440 B of class 1-3 polls (48,060 polls), then FC13 Cold Restart | 9100010 **not raised** | 9100010 raised |
 
 Notes:
 

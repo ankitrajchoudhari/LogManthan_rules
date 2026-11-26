@@ -1,2 +1,0 @@
-{"dest_ip": "10.10.1.11", "dest_port": 20000, "metadata": {"event_code": 2270000, "product": {"name": "Suricata"}}, "msg": "SURICATA DNP3 Request flood detected", "src_endpoint": {"ip": "10.10.1.66"}, "src_port": 37190, "timestamp": "2026-11-26T13:24:35.392423+0000"}
-{"dest_ip": "10.10.1.66", "dest_port": 37190, "metadata": {"event_code": 2270000, "product": {"name": "Suricata"}}, "msg": "SURICATA DNP3 Request flood detected", "src_endpoint": {"ip": "10.10.1.11"}, "src_port": 20000, "timestamp": "2026-11-26T13:24:42.166703+0000"}

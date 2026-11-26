@@ -99,7 +99,7 @@ for s in "$@"; do
     jump-remote) record_remote jump-remote jump-host 10.10.1.131 ;;
     # One connection with more than 1 MiB of polling, then a command (stream reassembly depth test).
     modbus-long-session) record_attack "$s" 330 ;;
-    dnp3-long-session) record_attack "$s" 150 ;;
+    dnp3-long-session) record_attack "$s" 300 ;;
     *) echo "record: unknown scenario $s" >&2; exit 2 ;;
   esac
 done
