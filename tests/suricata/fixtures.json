@@ -10,7 +10,8 @@
     "OT_WRITERS": "[203.0.113.1]",
     "ENG_WS": "[203.0.113.2]",
     "DNP3_MASTERS": "[203.0.113.3]",
-    "IT_NET": "[203.0.113.0/24]"
+    "IT_NET": "[203.0.113.0/24]",
+    "OT_JUMP_HOSTS": "[203.0.113.4]"
   },
   "var_sets": {
     "lab": {
@@ -18,21 +19,24 @@
       "OT_WRITERS": "[10.10.1.20]",
       "ENG_WS": "[10.10.1.30]",
       "DNP3_MASTERS": "[10.10.1.40]",
-      "IT_NET": "[10.10.1.128/25]"
+      "IT_NET": "[10.10.1.128/25]",
+      "OT_JUMP_HOSTS": "[10.10.1.131]"
     },
     "lab_compromised_writer": {
       "OT_NET": "[10.10.1.10,10.10.1.11]",
       "OT_WRITERS": "[10.10.1.20,10.10.1.66]",
       "ENG_WS": "[10.10.1.30]",
       "DNP3_MASTERS": "[10.10.1.40]",
-      "IT_NET": "[10.10.1.128/25]"
+      "IT_NET": "[10.10.1.128/25]",
+      "OT_JUMP_HOSTS": "[10.10.1.131]"
     },
     "iti_master_allowed": {
       "OT_NET": "any",
       "OT_WRITERS": "![203.0.113.0/24]",
       "ENG_WS": "[203.0.113.2]",
       "DNP3_MASTERS": "[203.0.113.3]",
-      "IT_NET": "[203.0.113.0/24]"
+      "IT_NET": "[203.0.113.0/24]",
+      "OT_JUMP_HOSTS": "[203.0.113.4]"
     }
   },
   "fixtures": [
@@ -356,6 +360,30 @@
         9100010
       ],
       "exact": true
+    },
+    {
+      "id": "lab_it_remote",
+      "note": "IT host 10.10.1.130 (IT_NET, not a jump host): 10 rounds of SSH 22 + RDP 3389 to the PLC, 20 SYNs. The threshold limits 9100040 to one alert per source per hour.",
+      "path": "tests/suricata/lab/lab_it_remote.pcap",
+      "sha256": "f33519d1af141613674f1861f7e8dadb11f1bf88e1a8262c1047b5da1938fcac",
+      "vars": "lab",
+      "expect": "fire",
+      "expect_sids": [
+        9100040
+      ],
+      "expect_counts": {
+        "9100040": 1
+      },
+      "exact": true
+    },
+    {
+      "id": "lab_jump_remote",
+      "note": "Jump host 10.10.1.131 (IT_NET and OT_JUMP_HOSTS): the same 20 SYNs. Approved, so no LM-OT alert.",
+      "path": "tests/suricata/lab/lab_jump_remote.pcap",
+      "sha256": "5beba07bf161db5f8daeddc1b21ec37ca3db89a788759fecf69d494a142a7e61",
+      "vars": "lab",
+      "expect": "silent",
+      "expect_sids": []
     }
   ]
 }

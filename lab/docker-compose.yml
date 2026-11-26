@@ -70,6 +70,24 @@ services:
     networks:
       otlab: { ipv4_address: 10.10.1.66 }
 
+  # IT side (IT_NET 10.10.1.128/25): same image and hardening as the attacker, started only by
+  # `make attack SCENARIO=it-remote|jump-remote`.
+  it-host:
+    profiles: [attack]
+    build: { context: ., dockerfile: attacker/Dockerfile }
+    image: otlab/attacker:local
+    <<: *hardened
+    networks:
+      otlab: { ipv4_address: 10.10.1.130 }   # IT_NET, not a jump host
+
+  jump-host:
+    profiles: [attack]
+    build: { context: ., dockerfile: attacker/Dockerfile }
+    image: otlab/attacker:local
+    <<: *hardened
+    networks:
+      otlab: { ipv4_address: 10.10.1.131 }   # IT_NET and OT_JUMP_HOSTS
+
   suricata:
     image: jasonish/suricata@sha256:bf4bea5b45d9c10265a3ee6628e2ec8930b9d1fb7caf9d1afb63af413b9cbb26  # 8.0.7
     # Host network namespace is needed to see the otlab0 bridge. No ports are opened.

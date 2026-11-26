@@ -28,7 +28,7 @@ technique), the field LogManthan reads. The older `mitre_ics` key is rejected by
 | 9100017 | LM-OT DNP3 Delete File on outstation | 1 | T0809 | `dnp3_file_delete` |
 | 9100020 | LM-OT ENIP List Identity discovery from non-engineering host | 2 | T0846 | `EthernetIP_enip_test` |
 | 9100030 | LM-OT S7comm PLC STOP request | 1 | T0858, T0816 | **none yet** |
-| 9100040 | LM-OT Remote service connection from IT into OT | 1 | T0886 | **none yet** |
+| 9100040 | LM-OT Remote service connection from IT into OT (rev 3: excludes OT_JUMP_HOSTS, once per source per hour) | 1 | T0886 | `lab_it_remote` (exactly 1 alert for 20 SYNs); silent: `lab_jump_remote` |
 
 Should-not-fire (silent) fixtures:
 - `dnp3_read_and_response`: normal DNP3 read; no LM SID may fire.

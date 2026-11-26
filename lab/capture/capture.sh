@@ -23,7 +23,8 @@ if [ $(( flags & 0x100 )) -eq 0 ]; then
   exit 1
 fi
 
-FILTER='(tcp port 502 or tcp port 20000 or tcp port 44818 or udp port 44818)'
+# OT protocols, plus the remote-service ports of 9100040 (SSH, SMB, RDP, VNC from IT into OT).
+FILTER='(tcp port 502 or tcp port 20000 or tcp port 44818 or udp port 44818 or tcp port 22 or tcp port 445 or tcp port 3389 or tcp port 5900)'
 [ -n "$HOST" ] && FILTER="${FILTER} and host ${HOST}"
 
 echo "capture: ${IFACE} -> /out/${NAME}.pcap for ${DURATION}s, filter: ${FILTER}"

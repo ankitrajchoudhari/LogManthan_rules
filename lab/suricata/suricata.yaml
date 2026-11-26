@@ -12,7 +12,8 @@ vars:
     OT_WRITERS: "[10.10.1.20]"      # hmi
     ENG_WS: "[10.10.1.30]"          # engineering workstation slot (unused)
     DNP3_MASTERS: "[10.10.1.40]"    # dnp3-master
-    IT_NET: "[10.10.1.128/25]"      # IT network slot (unused)
+    IT_NET: "[10.10.1.128/25]"      # it-host 10.10.1.130, jump-host 10.10.1.131
+    OT_JUMP_HOSTS: "[10.10.1.131]"  # jump-host: approved for remote sessions into OT
   port-groups: {}
 
 default-log-dir: /var/log/suricata

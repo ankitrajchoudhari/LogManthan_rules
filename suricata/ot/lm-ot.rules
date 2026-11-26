@@ -5,6 +5,7 @@
 #   ENG_WS        : engineering workstations (allowed to program/discover devices)
 #   DNP3_MASTERS  : SCADA masters allowed to send DNP3 control commands
 #   IT_NET        : corporate IT networks (Purdue L4-L5)
+#   OT_JUMP_HOSTS : approved admin/vendor jump hosts allowed to open remote sessions into OT
 # Enable parsers in suricata.yaml -> app-layer.protocols: modbus, dnp3, enip (enabled: yes)
 # Stream depth: on Suricata 8.0.7, Modbus and DNP3 are inspected only for the first
 # stream.reassembly.depth bytes of each connection direction (default 1 MiB). Measured in the lab:
@@ -66,4 +67,6 @@ alert enip !$ENG_WS any -> $OT_NET 44818 (msg:"LM-OT ENIP List Identity discover
 alert tcp !$ENG_WS any -> $OT_NET 102 (msg:"LM-OT S7comm PLC STOP request"; flow:to_server,established; content:"|03 00|"; depth:2; content:"|32 01|"; distance:5; within:2; content:"|29|"; distance:8; within:1; classtype:attempted-dos; metadata:mitre_technique_id T0858, mitre_technique_id T0816, lm_severity critical; priority:1; sid:9100030; rev:2;)
 
 # ---------- IT -> OT boundary ----------
-alert tcp $IT_NET any -> $OT_NET [445,3389,5900,22] (msg:"LM-OT Remote service connection from IT into OT"; flow:to_server; flags:S; classtype:policy-violation; metadata:mitre_technique_id T0886, lm_severity high; priority:1; sid:9100040; rev:2;)
+# Approved jump hosts are excluded. One alert per source per hour: repeated connection attempts
+# (RDP/SSH retries, several ports) would otherwise open many cases for one event.
+alert tcp [$IT_NET,!$OT_JUMP_HOSTS] any -> $OT_NET [445,3389,5900,22] (msg:"LM-OT Remote service connection from IT into OT"; flow:to_server; flags:S; threshold:type limit, track by_src, count 1, seconds 3600; classtype:policy-violation; metadata:mitre_technique_id T0886, lm_severity high; priority:1; sid:9100040; rev:3;)

@@ -18,6 +18,11 @@ DNP3 scenarios (default target: the outstation 10.10.1.11), sent from this non-m
   dnp3-write                 FC2 Write, g50v1 time and date               -> 9100013
   dnp3-disable-unsolicited   FC21 Disable Unsolicited, classes 1-3        -> 9100016
 
+IT to OT remote sessions (run from the IT hosts, not from the attacker; `make attack` picks the host):
+  it-remote      from it-host 10.10.1.130: 10 x (SSH 22 + RDP 3389) to the PLC -> 9100040 exactly once
+  jump-remote    from jump-host 10.10.1.131 (OT_JUMP_HOSTS): the same          -> nothing
+  The PLC does not listen on 22/3389; it refuses the connection, and the rule matches the SYN.
+
 Long sessions (stream reassembly depth test): one TCP connection carries more than 1 MiB of normal
 polling from client to server (--bytes, default 1.1 MiB), then one control command on the SAME
 connection. Requests are pipelined (batches in one segment, paced) so no flood rule fires.
@@ -30,6 +35,7 @@ import argparse
 import socket
 import struct
 import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 
 import dnp3
@@ -171,6 +177,26 @@ def dnp3_long_session(target, args):
         session.close()
 
 
+def remote_sessions(expected_src):
+    def run(target, args):
+        src = socket.gethostbyname(socket.gethostname())
+        if src != expected_src:
+            log(f"warning: running from {src}, this scenario is meant for {expected_src}")
+        results = Counter()
+        for _ in range(args.count):
+            for port in (22, 3389):
+                try:
+                    labnet.connect(target, port, timeout=1.0).close()
+                    results[f"{port} open"] += 1
+                except ConnectionRefusedError:
+                    results[f"{port} refused"] += 1
+                except OSError as exc:
+                    results[f"{port} {type(exc).__name__}"] += 1
+                time.sleep(0.2)
+        log(f"remote sessions from {src} to {target}: {dict(sorted(results.items()))}")
+    return run
+
+
 def dnp3_scenario(fc, objects, label):
     def run(target, args):
         session = dnp3.connect_master(target)
@@ -193,6 +219,8 @@ SCENARIOS = {
     "dnp3-direct-operate": (dnp3_scenario(dnp3.DIRECT_OPERATE, dnp3.crob(0), "DNP3 direct operate (CROB, output 0)"), 0),
     "dnp3-write": (dnp3_scenario(dnp3.WRITE, dnp3.time_and_date(int(time.time() * 1000)), "DNP3 write (time and date)"), 0),
     "dnp3-disable-unsolicited": (dnp3_scenario(dnp3.DISABLE_UNSOLICITED, dnp3.EVENTS, "DNP3 disable unsolicited"), 0),
+    "it-remote": (remote_sessions("10.10.1.130"), 10),
+    "jump-remote": (remote_sessions("10.10.1.131"), 10),
     "modbus-long-session": (modbus_long_session, 0),
     "dnp3-long-session": (dnp3_long_session, 0),
 }
@@ -203,7 +231,8 @@ def main():
     p.add_argument("scenario", choices=sorted(SCENARIOS))
     p.add_argument("--target", default=None,
                    help="target (lab hosts in 10.10.1.0/24 only); default PLC 10.10.1.10, DNP3 outstation 10.10.1.11")
-    p.add_argument("--count", type=int, default=None, help="probes (scan) or total requests (flood)")
+    p.add_argument("--count", type=int, default=None,
+                   help="probes (scan), total requests (flood) or rounds of SSH+RDP attempts (it/jump-remote)")
     p.add_argument("--conns", type=int, default=4, help="connections used by flood")
     p.add_argument("--bytes", type=int, default=LONG_SESSION_BYTES,
                    help="client-to-server bytes of polling before the command (long-session scenarios)")

@@ -457,6 +457,7 @@ def main():
                 pcap = fetch(fx)
                 events = replay_eve(pcap, rules, fx_vars, fx.get("sets", ()))
                 got = sorted(lm_sids(events))
+                counts = Counter(ev["alert"]["signature_id"] for ev in events if ev.get("event_type") == "alert")
                 decode = decode_problems(events, fx["app_proto"]) if "app_proto" in fx else []
             except Exception as exc:  # report and continue with the next fixture
                 print(f"  FAIL {fx['id']} expected={fx['expect']}:{expected} error={exc}")
@@ -473,9 +474,14 @@ def main():
             else:
                 ok = False
             ok = ok and not decode
+            # optional "expect_counts": {"sid": n} - the SID must fire exactly n times (threshold rules)
+            count_ok = all(counts[int(sid)] == n for sid, n in fx.get("expect_counts", {}).items())
+            ok = ok and count_ok
             mode = "exact" if fx.get("exact") else fx["expect"]
             print(f"  {'PASS' if ok else 'FAIL'} {fx['id']} expected={mode}:{expected} got={got}"
                   + (f" sets={','.join(fx['sets'])}" if fx.get("sets") else "")
+                  + (" counts=" + ",".join(f"{sid}:{counts[int(sid)]}" for sid in fx["expect_counts"])
+                     + ("" if count_ok else f" (expected {fx['expect_counts']})") if fx.get("expect_counts") else "")
                   + (f" decoded={fx['app_proto']}" if "app_proto" in fx and not decode else "")
                   + (f"  <- not cleanly decoded as {fx['app_proto']}: {'; '.join(decode[:3])}" if decode else ""))
             passed += ok

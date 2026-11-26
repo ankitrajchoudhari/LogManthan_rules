@@ -87,8 +87,9 @@ of polling, then one command on the same connection):
 - After the limit, Modbus responses keep arriving while requests are no longer parsed, so
   `SURICATA Modbus unsolicited response` (2250002) fires on every response: 15890 times before
   tuning, 2 after. A burst of 2250002 on one long connection is a sign the limit was reached.
-- The DNP3 `flooded` events (2270000) in `lab_dnp3_long_session` come from the scenario itself (50 polls
-  outstanding at once), with or without the limit.
+- The DNP3 `Request flood detected` events (2270000) in `lab_dnp3_long_session` come from the scenario
+  itself: 50 polls outstanding at once, above Suricata's default DNP3 `max-tx` (32 open transactions);
+  with `max-tx=64` they drop from 875 to 7. They appear with or without the depth limit.
 - A site whose OT masters keep one connection open for a long time can raise the **global**
   `stream.reassembly.depth`. It applies to all TCP traffic, so it costs memory and CPU on the whole
   sensor (Rajeev's point); measure before and after. Never set it to 0 (unlimited).

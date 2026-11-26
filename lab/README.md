@@ -20,7 +20,9 @@ the lab at the gateway address 10.10.1.1.
 | *(none yet)* | 10.10.1.30 | Engineering workstation slot | `ENG_WS` |
 | `dnp3-master` | 10.10.1.40 | DNP3 master, link address 1: integrity poll (class 1, 2, 3, 0) on connect and every 60 s, class 1–3 event poll every 2 s, clears the outstation's restart flag with an allowed WRITE | `DNP3_MASTERS` |
 | `attacker` | 10.10.1.66 | Attack traffic generator, started on demand | none |
-| *(unused)* | 10.10.1.128/25 | IT network slot | `IT_NET` |
+| `it-host` | 10.10.1.130 | IT workstation, started on demand (`it-remote`) | `IT_NET` |
+| `jump-host` | 10.10.1.131 | Approved admin/vendor jump host, started on demand (`jump-remote`) | `IT_NET`, `OT_JUMP_HOSTS` |
+| *(unused)* | rest of 10.10.1.128/25 | IT network | `IT_NET` |
 | `suricata` | host netns | Sniffs `otlab0` with [suricata/suricata.yaml](suricata/suricata.yaml), writes `lab/out/eve.json` | — |
 
 ## Quick start
@@ -58,6 +60,8 @@ make lab-down
 | `dnp3-write` | DNP3 FC2 Write, g50v1 time and date | T0836 | 9100013 | 1 |
 | `dnp3-disable-unsolicited` | DNP3 FC21 Disable Unsolicited for classes 1–3 | T0878 | 9100016 | 1 |
 | `modbus-long-session` | One connection: 1.1 MiB of pipelined FC1 read-coil polling (~4 min), then FC6 write HR0 | T0855, T0836 | none at default depth (9100001 with a raised depth) | 1 |
+| `it-remote` | From `it-host` 10.10.1.130: 10 rounds of SSH 22 + RDP 3389 to the PLC (refused; the rule matches the SYN) | T0886 | 9100040 once (threshold: once per source per hour) | 1 |
+| `jump-remote` | The same from `jump-host` 10.10.1.131 (`OT_JUMP_HOSTS`) | | none | |
 | `dnp3-long-session` | One connection: 1.1 MiB of pipelined class 1–3 polls (~1 min), then FC13 Cold Restart | T0816 | none at default depth (9100010 with a raised depth) | 1 |
 
 DNP3 scenarios target the outstation 10.10.1.11 by default and reuse the master's link address 1:
@@ -95,7 +99,7 @@ use `--since` to look at one run only.
 
 ## Safety and hardening
 
-- The attacker, HMI and DNP3 master refuse any target outside `10.10.1.0/24`, and also the network address
+- The attacker, the IT hosts (`it-host`, `jump-host`: same image), HMI and DNP3 master refuse any target outside `10.10.1.0/24`, and also the network address
   10.10.1.0, the gateway 10.10.1.1 and the broadcast 10.10.1.255, before opening a socket
   (`common/labnet.py: check_target`). `scan` skips those three as well.
   Try `docker run --rm --network none otlab/attacker:local write --target 10.10.1.1`.

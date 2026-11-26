@@ -1,0 +1,1 @@
+{"dest_ip": "10.10.1.10", "dest_port": 22, "metadata": {"event_code": 9100040, "product": {"name": "Suricata"}}, "msg": "LM-OT Remote service connection from IT into OT", "src_endpoint": {"ip": "10.10.1.130"}, "src_port": 33618, "timestamp": "2026-11-26T13:57:12.533296+0000"}

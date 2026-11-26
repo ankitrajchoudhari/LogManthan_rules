@@ -22,7 +22,7 @@ help:
 	@echo "make sigma-test                   sigma check + field/SID sync + correlation scenarios"
 	@echo "make sigma-events [CHECK=1]       rebuild (or check) tests/sigma/events from the lab captures"
 	@echo "make lab-up                       build and start PLC, HMI and Suricata sensor"
-	@echo "make attack SCENARIO=<name>       scan | write | listen-only | restart-comms | flood"
+	@echo "make attack SCENARIO=<name>       scan | write | listen-only | restart-comms | flood | dnp3-* | it-remote | jump-remote | *-long-session"
 	@echo "make alerts [ARGS=...]            show LM-OT alerts from lab/out/eve.json"
 	@echo "make capture NAME=x DURATION=30 [HOST=ip]  record lab traffic to lab/out/x.pcap"
 	@echo "make record-fixtures             re-record tests/suricata/lab/*.pcap from the running lab"
@@ -53,14 +53,17 @@ lab-down:
 lab-logs:
 	$(COMPOSE) logs --tail 50
 
+# it-remote / jump-remote run from the IT hosts; every other scenario from the attacker.
+ATTACK_HOST = $(if $(filter it-remote%,$(SCENARIO)),it-host,$(if $(filter jump-remote%,$(SCENARIO)),jump-host,attacker))
+
 attack:
-	$(COMPOSE) run --rm --build attacker $(SCENARIO)
+	$(COMPOSE) run --rm --build $(ATTACK_HOST) $(SCENARIO)
 
 alerts:
 	docker run --rm -v "$(CURDIR)/lab:/lab:ro" --entrypoint python3 $(SURICATA_IMAGE) /lab/tools/alerts.py /lab/out/eve.json $(ARGS)
 
 capture:
-	$(COMPOSE) run --rm capture $(NAME) $(DURATION) $(HOST)
+	$(COMPOSE) run --rm --build capture $(NAME) $(DURATION) $(HOST)
 
 record-fixtures:
 	sh lab/tools/record_fixtures.sh

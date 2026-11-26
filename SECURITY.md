@@ -13,8 +13,8 @@ in a public issue. This applies in particular to:
   Use `203.0.113.0/24` (documentation range) in tests and `10.10.1.0/24` in the lab only. The lab
   captures in `tests/suricata/lab/` (and their `lab` address-group set) carry lab addresses, and so
   do the Sigma test events built from them (`tests/sigma/events/`; the builder refuses any other address).
-  Site values for the address groups (`OT_NET`, `OT_WRITERS`, `ENG_WS`, `DNP3_MASTERS`, `IT_NET`)
-  live outside this repo.
+  Site values for the address groups (`OT_NET`, `OT_WRITERS`, `ENG_WS`, `DNP3_MASTERS`, `IT_NET`,
+  `OT_JUMP_HOSTS`) live outside this repo.
 - **Third-party captures:** they are downloaded at test time and verified by SHA-256.
   Only original lab captures under `tests/suricata/lab/` may be committed.
   Only CC BY / MIT / BSD datasets are used; never NC or unlicensed ones.

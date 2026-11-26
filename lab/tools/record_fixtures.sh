@@ -46,6 +46,17 @@ record_attack() {  # record_attack <scenario> <seconds> [capture name] [extra at
   save "$name"
 }
 
+record_remote() {  # record_remote <scenario> <service> <source ip>: IT-side host, filtered to that host
+  name=$(echo "$1" | tr '-' '_')
+  $COMPOSE run --rm capture "$name" 20 "$3" > /dev/null 2>&1 &
+  pid=$!
+  wait_capture_started
+  # No --build here: the image was built above, and a rebuild could eat the capture window.
+  $COMPOSE run --rm "$2" "$1" 2>&1 | grep '^attacker:' || true
+  wait "$pid"
+  save "$name"
+}
+
 record_hmi() {  # record_hmi <seconds>
   $COMPOSE run --rm capture hmi_normal "$1" "$HMI" > /dev/null 2>&1 &
   pid=$!
@@ -68,10 +79,12 @@ record_dnp3_master() {  # record_dnp3_master <seconds>
   save dnp3_master_normal
 }
 
-# Build the attacker image first, so a rebuild never eats into a capture window.
+# Build the attacker image first (the IT hosts use the same image), so a rebuild never eats into a
+# capture window.
 $COMPOSE --profile attack build attacker > /dev/null
+$COMPOSE --profile capture build capture > /dev/null
 
-[ $# -eq 0 ] && set -- scan write listen-only restart-comms flood flood-heavy hmi   dnp3-cold-restart dnp3-warm-restart dnp3-direct-operate dnp3-write dnp3-disable-unsolicited dnp3-master modbus-long-session dnp3-long-session
+[ $# -eq 0 ] && set -- scan write listen-only restart-comms flood flood-heavy hmi   dnp3-cold-restart dnp3-warm-restart dnp3-direct-operate dnp3-write dnp3-disable-unsolicited dnp3-master it-remote jump-remote modbus-long-session dnp3-long-session
 for s in "$@"; do
   case "$s" in
     scan)  record_attack scan 25 ;;
@@ -82,6 +95,8 @@ for s in "$@"; do
     dnp3-cold-restart|dnp3-warm-restart|dnp3-direct-operate|dnp3-write|dnp3-disable-unsolicited)
            record_attack "$s" 12 ;;
     dnp3-master) record_dnp3_master 600 ;;
+    it-remote)   record_remote it-remote it-host 10.10.1.130 ;;
+    jump-remote) record_remote jump-remote jump-host 10.10.1.131 ;;
     # One connection with more than 1 MiB of polling, then a command (stream reassembly depth test).
     modbus-long-session) record_attack "$s" 330 ;;
     dnp3-long-session) record_attack "$s" 150 ;;

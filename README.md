@@ -92,7 +92,7 @@ Facts to keep in mind:
 | `scripts/build_sigma_events.py` | Rebuilds (or checks) the Sigma test events from the lab captures. |
 | `tests/suricata/fixtures.json` | Every test capture: where it is, its SHA-256 and which SIDs must (or must not) fire. |
 | `tests/suricata/tuning.json` | Event-alert limits per capture for the tuning test. |
-| `tests/suricata/lab/` | Our own lab captures: 13 pcaps (one per scenario plus two normal-traffic baselines) and 2 gzipped long-session captures (`*.pcap.gz`). |
+| `tests/suricata/lab/` | Our own lab captures: 15 pcaps (one per scenario plus two normal-traffic baselines) and 2 gzipped long-session captures (`*.pcap.gz`). |
 | `tests/sigma/events/` | Suricata alerts replayed from the lab captures, used as Sigma test input. |
 | `tests/sigma/scenarios.json` | Correlation scenarios and their expected results. |
 | `lab/docker-compose.yml` | The OT lab: network, containers and hardening. |
@@ -167,7 +167,9 @@ that it takes about 45 seconds. The end of the output should look like this (sho
   PASS lab_modbus_long_session_depth_10mb expected=exact:[9100001] got=[9100001] sets=stream.reassembly.depth=10mb
   PASS lab_dnp3_long_session expected=absent:[9100010] got=[]
   PASS lab_dnp3_long_session_depth_10mb expected=exact:[9100010] got=[9100010] sets=stream.reassembly.depth=10mb decoded=dnp3
-30/30 dynamic tests passed
+  PASS lab_it_remote expected=exact:[9100040] got=[9100040] counts=9100040:1
+  PASS lab_jump_remote expected=silent:[] got=[]
+32/32 dynamic tests passed
 == Tuning (bundled Modbus/DNP3 event rules + tuning/threshold.config) ==
   ...
   total event alerts: 32240 before -> 29 after tuning
@@ -236,14 +238,14 @@ the older `mitre_ics` key is not read, so the lint rejects it. A rule with two t
 | 9100017 | DNP3 Delete File on outstation | 1 | T0809 | `dnp3_file_delete` |
 | 9100020 | ENIP List Identity discovery from non-engineering host | 2 | T0846 | `EthernetIP_enip_test` |
 | 9100030 | S7comm PLC STOP request | 1 | T0858, T0816 | **none yet** |
-| 9100040 | Remote service connection from IT into OT | 1 | T0886 | **none yet** |
+| 9100040 | Remote service connection from IT into OT (not from an approved jump host; once per source per hour) | 1 | T0886 | `lab_it_remote`, silent: `lab_jump_remote` |
 
-**Not yet tested:** 9100005, 9100030 and 9100040. They load cleanly in Suricata, but no capture
+**Not yet tested:** 9100005 and 9100030. They load cleanly in Suricata, but no capture
 proves they fire. The S7 rule in particular matches raw byte offsets and must be checked against a
 real S7 capture before anyone relies on it.
 
 Tests that must stay **silent** (no LM-OT alert at all): `dnp3_read_and_response`, `lab_hmi_normal`,
-`lab_dnp3_master_normal`. And `iti_modbustcp_master_allowed` must not raise 9100007 or 9100008.
+`lab_dnp3_master_normal`, `lab_jump_remote`. And `iti_modbustcp_master_allowed` must not raise 9100007 or 9100008.
 
 Known blind spot, tested on purpose: `lab_modbus_long_session` and `lab_dnp3_long_session` must
 **not** raise 9100001 / 9100010 at default settings, because the command comes after 1 MiB on one
@@ -252,7 +254,7 @@ prove the rules fire once the depth is raised.
 
 ### Address groups
 
-Rules never contain real IP addresses. They use five address groups, which each site sets in its own
+Rules never contain real IP addresses. They use six address groups, which each site sets in its own
 `suricata.yaml` under `vars.address-groups`. Site values are **never** committed to this repository.
 
 | Group | Meaning | Used by | Lab value |
@@ -262,6 +264,7 @@ Rules never contain real IP addresses. They use five address groups, which each 
 | `ENG_WS` | Engineering workstations, allowed to program and discover devices | 9100004, 9100020, 9100030 | `[10.10.1.30]` |
 | `DNP3_MASTERS` | SCADA masters allowed to send DNP3 control commands | 9100012 to 9100016 | `[10.10.1.40]` |
 | `IT_NET` | Corporate IT networks (Purdue levels 4-5) | 9100040 | `[10.10.1.128/25]` |
+| `OT_JUMP_HOSTS` | Approved admin/vendor jump hosts allowed to open remote sessions (SSH, SMB, RDP, VNC) into OT | 9100040 (excluded) | `[10.10.1.131]` |
 
 A site sets them like this (example values only):
 
@@ -273,6 +276,7 @@ vars:
     ENG_WS: "[192.0.2.60]"
     DNP3_MASTERS: "[192.0.2.70]"
     IT_NET: "[198.51.100.0/24]"
+    OT_JUMP_HOSTS: "[198.51.100.10]"
 app-layer:
   protocols:
     modbus: { enabled: yes }
@@ -338,6 +342,7 @@ A lab capture:
 | `sha256` | Checked before every use. A changed file fails the test. |
 | `expect` | `fire`: every SID in `expect_sids` must fire. `silent`: no LM-OT SID may fire. `absent`: none of `expect_sids` may fire (other SIDs may). |
 | `exact` | With `fire`: no other LM-OT SID may fire either. All lab captures use this. |
+| `expect_counts` | `{"sid": n}`: that SID must fire exactly `n` times. Used for threshold rules, for example `lab_it_remote` (9100040 once for 20 connection attempts). |
 | `app_proto` | Every flow must be decoded as this protocol, with no anomaly events. Used for the DNP3 lab captures, to prove our lab DNP3 is valid DNP3. |
 | `vars` | Which address-group set to use, from `var_sets` at the top of the file. Without it, the top-level `vars` are used. |
 | `sets` | Extra Suricata `--set` values for this fixture only, for example `["stream.reassembly.depth=10mb"]`. |
@@ -353,7 +358,7 @@ busy real master does not trigger the flood rules.
 - **External** captures come from ITI ICS-Security-Tools (CC BY 4.0). They are fetched by URL and
   pinned by SHA-256, so the repository never stores third-party files.
 - **Lab** captures are recorded from our own Docker lab (`make record-fixtures`, see section 8) and
-  are the only pcaps committed (`tests/suricata/lab/`: 13 `.pcap` files and 2 `.pcap.gz` long-session
+  are the only pcaps committed (`tests/suricata/lab/`: 15 `.pcap` files and 2 `.pcap.gz` long-session
   captures, which are 16.4 MB and 8.8 MB unpacked).
 
 ### Why replays run single-threaded
@@ -383,6 +388,8 @@ One internal Docker network, `otlab`, `10.10.1.0/24`.
 | *(empty slot)* | 10.10.1.30 | Engineering workstation | `ENG_WS` |
 | `dnp3-master` | 10.10.1.40 | DNP3 master: integrity poll every 60 s, event poll every 2 s | `DNP3_MASTERS` |
 | `attacker` | 10.10.1.66 | Started only when you run an attack | none |
+| `it-host` | 10.10.1.130 | IT workstation, started only by `it-remote` | `IT_NET` |
+| `jump-host` | 10.10.1.131 | Approved jump host, started only by `jump-remote` | `IT_NET`, `OT_JUMP_HOSTS` |
 | `suricata` | host network | Sensor on the `otlab0` bridge, writes `lab/out/eve.json` | |
 
 ### Step 1: start the lab
@@ -440,6 +447,8 @@ Run one scenario, then check its alert. `--src 10.10.1.66` limits the output to 
 | `make attack SCENARIO=dnp3-write` | DNP3 FC2 Write (time and date) | 9100013 | 1 |
 | `make attack SCENARIO=dnp3-disable-unsolicited` | DNP3 FC21 Disable Unsolicited, classes 1-3 | 9100016 | 1 |
 | `make attack SCENARIO=modbus-long-session` | One connection: 1.1 MiB of FC1 read-coil polling (about 4 minutes), then an FC6 write | **none** at default depth; 9100001 with a raised depth | 1 |
+| `make attack SCENARIO=it-remote` | From `it-host` 10.10.1.130: 10 rounds of SSH (22) and RDP (3389) to the PLC, 20 connection attempts | 9100040, **once** | 1 |
+| `make attack SCENARIO=jump-remote` | The same from `jump-host` 10.10.1.131, an approved jump host | none | |
 | `make attack SCENARIO=dnp3-long-session` | One connection: 1.1 MiB of class 1-3 polls (about 1 minute), then an FC13 Cold Restart | **none** at default depth; 9100010 with a raised depth | 1 |
 
 Example, the write attack:
@@ -543,7 +552,7 @@ The lab generates attack traffic, so it is locked down:
 - The `otlab` network is `internal`: containers cannot reach the internet or your LAN.
 - The bridge has **no IP address**, so the Docker host is not reachable from the lab at 10.10.1.1.
 - **No ports are published** to your machine. No container is privileged.
-- The attacker, HMI and DNP3 master **refuse any target outside 10.10.1.0/24**, and also the network,
+- The attacker, the IT hosts, the HMI and the DNP3 master **refuse any target outside 10.10.1.0/24**, and also the network,
   gateway and broadcast addresses, before opening a socket. You can check it yourself:
 
   ```sh
@@ -577,6 +586,8 @@ Reset between rounds with `make lab-down && make lab-up`.
 8. 9100012 (Direct Operate) excludes `DNP3_MASTERS`, but 9100010 (Cold Restart) does not. Why?
 9. After the full set of attacks, which Sigma correlations would fire, and for which host?
 10. Give the MITRE ATT&CK for ICS technique for each alert you saw.
+11. `it-remote` and `jump-remote` each make 20 SSH/RDP connection attempts to the PLC. Why does one
+    raise a single alert and the other none?
 
 ### Expected answers
 
@@ -612,6 +623,11 @@ Reset between rounds with `make lab-down && make lab-up`.
     | 9100012 | T0855 Unauthorized Command Message |
     | 9100013 | T0836 Modify Parameter |
     | 9100016 | T0878 Alarm Suppression |
+    | 9100040 | T0886 Remote Services |
+11. 10.10.1.131 is in `OT_JUMP_HOSTS`, an approved jump host, so the rule's source
+    `[$IT_NET,!$OT_JUMP_HOSTS]` excludes it. 10.10.1.130 is only in `IT_NET`. Its 20 attempts raise one
+    alert because of `threshold: type limit, track by_src, count 1, seconds 3600`: one case per host
+    per hour, not twenty.
 
 ## 10. Tuning Suricata's built-in Modbus/DNP3 alerts
 
@@ -657,8 +673,10 @@ The two long-session captures raise event alerts for different reasons:
   side of the connection passes 1 MiB, Suricata stops seeing the requests but still sees the
   responses, so every response looks unsolicited. With the depth raised to 10 MB there are none.
   On a real network, a burst of this event on one long connection is a sign that depth was reached.
-- **DNP3 `flooded` (2270000)** appears with and without the depth limit. It comes from the lab
-  scenario itself, which keeps 50 polls outstanding at once; a real master waits for each response.
+- **DNP3 `Request flood detected` (2270000)** appears with and without the depth limit. It comes
+  from the lab scenario itself: it keeps 50 polls outstanding at once, more than Suricata's default
+  DNP3 `max-tx` of 32 open transactions per flow. With `app-layer.protocols.dnp3.max-tx=64` it drops
+  from 875 to 7. A real master waits for each response, so this is a test artefact, not a finding.
 
 ### The "Data mismatch" problem (sawp-modbus issue #13)
 
@@ -856,7 +874,7 @@ make test
 == Static (suricata -T) ==
   PASS: rules load (0 warnings, 0 ignored)
 == Dynamic (pcap replay) ==
-30/30 dynamic tests passed
+32/32 dynamic tests passed
 == Tuning (bundled Modbus/DNP3 event rules + tuning/threshold.config) ==
   PASS: event-alert volume within limits, nothing silenced, LM-OT SIDs unchanged
 ```
