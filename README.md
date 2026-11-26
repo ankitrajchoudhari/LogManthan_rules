@@ -354,6 +354,18 @@ echo "include: suricata-ot.yaml" >> /etc/suricata/suricata.yaml
 
 (Or start Suricata with `--include /etc/suricata/suricata-ot.yaml`.)
 
+If `suricata.yaml` already has an `include:` key, add `suricata-ot.yaml` to that list instead of
+appending a second `include:` line:
+
+```yaml
+include:
+  - existing.yaml
+  - suricata-ot.yaml
+```
+
+Suricata 8.0.7 loaded both files either way in our test, but a duplicate top-level key is not valid
+YAML for other tools (config management, linters) that may read the same file.
+
 ### Step 6: rate-limit the bundled Modbus/DNP3 event rules
 
 If the client has no threshold file of their own, copy `tuning/threshold.config` to
