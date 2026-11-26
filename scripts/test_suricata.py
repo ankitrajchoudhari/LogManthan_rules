@@ -110,8 +110,11 @@ def lint():
             errors.append(f"{where}: missing classtype:")
         elif ct.group(1) not in classtypes:
             errors.append(f"{where}: classtype {ct.group(1)} not defined in lab/suricata/classification.config")
-        if not re.search(r"metadata:[^;]*\bmitre_ics\s+T\d{4}", rule):
-            errors.append(f"{where}: missing metadata:mitre_ics Txxxx")
+        # LogManthan reads ATT&CK IDs from mitre_technique_id (ET style); mitre_ics is not read.
+        if not re.search(r"metadata:[^;]*\bmitre_technique_id\s+T\d{4}", rule):
+            errors.append(f"{where}: missing metadata:mitre_technique_id Txxxx")
+        if re.search(r"metadata:[^;]*\bmitre_ics\b", rule):
+            errors.append(f"{where}: metadata key mitre_ics is not read by LogManthan; use mitre_technique_id")
         if re.search(r"[(;]\s*lua(jit)?\s*:", rule, re.I):
             errors.append(f"{where}: Lua rules are banned")
         m = re.search(r"[(;]\s*sid:\s*(\d+)\s*;", rule)

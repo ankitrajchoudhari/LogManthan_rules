@@ -5,6 +5,9 @@ even after a rule is retired: mark it *retired* here instead of deleting the row
 
 Priority: `1` = Critical (opens a case), `2` = Medium (alert only), `3` = Low.
 
+The MITRE column is written into each rule as `metadata:mitre_technique_id Txxxx` (one key per
+technique), the field LogManthan reads. The older `mitre_ics` key is rejected by the lint.
+
 | SID | msg | priority | MITRE ATT&CK for ICS | test fixture |
 |---|---|---|---|---|
 | 9100001 | LM-OT Modbus write from unauthorised host | 1 | T0855, T0836 | `bro_modbus_modbus`, `lab_write` |

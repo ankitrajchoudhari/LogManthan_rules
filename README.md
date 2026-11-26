@@ -196,7 +196,10 @@ If all of that passes, your setup is correct.
 ## 6. The rules
 
 All rules live in `suricata/ot/lm-ot.rules`. Every rule has a message starting with `LM-OT`, a
-`classtype`, a `priority`, `metadata:mitre_ics Txxxx`, a `sid` and a `rev`. The test suite enforces this.
+`classtype`, a `priority`, `metadata:mitre_technique_id Txxxx`, a `sid` and a `rev`. The test suite enforces this.
+LogManthan reads the ATT&CK technique from `mitre_technique_id` (the key Emerging Threats rules use);
+the older `mitre_ics` key is not read, so the lint rejects it. A rule with two techniques repeats the key:
+`metadata:mitre_technique_id T0855, mitre_technique_id T0836, lm_severity high;`.
 
 ### Priority
 
@@ -284,7 +287,7 @@ if Suricata exits 0.
 
 | Stage | What it checks | Fails when |
 |---|---|---|
-| 1. Lint | Every rule against the repo conventions | Missing `LM-OT` prefix, `classtype`, `priority`, `metadata:mitre_ics`, `sid` or `rev`; uses Lua; is not an `alert`; SID out of range, reused or not in `SIDS.md`; classtype not defined in `lab/suricata/classification.config` |
+| 1. Lint | Every rule against the repo conventions | Missing `LM-OT` prefix, `classtype`, `priority`, `metadata:mitre_technique_id`, `sid` or `rev`; uses the old `mitre_ics` key; uses Lua; is not an `alert`; SID out of range, reused or not in `SIDS.md`; classtype not defined in `lab/suricata/classification.config` |
 | 2. Static | `suricata -T` on all rule files | Any warning or error. The only allowed exceptions are listed, with a reason, in `IGNORED_WARNINGS` in the script. |
 | 3. Dynamic | Replays every capture in `fixtures.json` | Wrong SIDs fire, expected SIDs do not fire, a SHA-256 does not match, or Suricata warns |
 | 4. Tuning | Replays every capture with the bundled event rules, with and without `tuning/threshold.config` | Event alerts go above the limit in `tuning.json`, an event is silenced completely, LM-OT SIDs change, or the Suricata version differs from the one the limits were measured on |
@@ -717,7 +720,7 @@ git checkout -b rule/9100018-dnp3-stop-app
 Add it to `suricata/ot/lm-ot.rules` under the DNP3 section:
 
 ```text
-alert dnp3 !$DNP3_MASTERS any -> $OT_NET any (msg:"LM-OT DNP3 Stop Application from non-master"; dnp3_func:18; classtype:attempted-dos; metadata:mitre_ics T0881, lm_severity critical; priority:1; sid:9100018; rev:1;)
+alert dnp3 !$DNP3_MASTERS any -> $OT_NET any (msg:"LM-OT DNP3 Stop Application from non-master"; dnp3_func:18; classtype:attempted-dos; metadata:mitre_technique_id T0881, lm_severity critical; priority:1; sid:9100018; rev:1;)
 ```
 
 Checklist:
@@ -729,7 +732,7 @@ Checklist:
 | `msg` | Starts with `LM-OT`, then protocol, then what happened. |
 | `classtype` | One defined in `lab/suricata/classification.config`: `attempted-recon`, `attempted-dos`, `policy-violation` or `protocol-command-decode`. A new classtype must be added there first. |
 | `priority` | 1 only if it changes the process or blinds the operator; otherwise 2. |
-| `metadata` | `mitre_ics Txxxx` for each technique, plus `lm_severity`. |
+| `metadata` | `mitre_technique_id Txxxx` for each technique (repeat the key for a second one), plus `lm_severity`. Never `mitre_ics`. |
 | `sid`, `rev` | The new SID, `rev:1`. Bump `rev` on every later change. |
 
 ### Step 4: run the tests and read the failure

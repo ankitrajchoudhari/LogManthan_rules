@@ -11,17 +11,17 @@
 # priority:1 -> LogManthan Critical (opens a case); priority:2 -> Medium (alert + Sigma correlation only).
 
 # ---------- Modbus/TCP (port 502) ----------
-alert modbus !$OT_WRITERS any -> $OT_NET 502 (msg:"LM-OT Modbus write from unauthorised host"; modbus: access write; classtype:policy-violation; metadata:mitre_ics T0855, mitre_ics T0836, lm_severity high; priority:1; sid:9100001; rev:1;)
+alert modbus !$OT_WRITERS any -> $OT_NET 502 (msg:"LM-OT Modbus write from unauthorised host"; modbus: access write; classtype:policy-violation; metadata:mitre_technique_id T0855, mitre_technique_id T0836, lm_severity high; priority:1; sid:9100001; rev:2;)
 
-alert modbus any any -> $OT_NET 502 (msg:"LM-OT Modbus diagnostics Force Listen Only Mode (device goes silent)"; modbus: function 8, subfunction 4; classtype:attempted-dos; metadata:mitre_ics T0814, lm_severity critical; priority:1; sid:9100002; rev:1;)
+alert modbus any any -> $OT_NET 502 (msg:"LM-OT Modbus diagnostics Force Listen Only Mode (device goes silent)"; modbus: function 8, subfunction 4; classtype:attempted-dos; metadata:mitre_technique_id T0814, lm_severity critical; priority:1; sid:9100002; rev:2;)
 
-alert modbus any any -> $OT_NET 502 (msg:"LM-OT Modbus diagnostics Restart Communications"; modbus: function 8, subfunction 1; classtype:attempted-dos; metadata:mitre_ics T0816, lm_severity critical; priority:1; sid:9100003; rev:1;)
+alert modbus any any -> $OT_NET 502 (msg:"LM-OT Modbus diagnostics Restart Communications"; modbus: function 8, subfunction 1; classtype:attempted-dos; metadata:mitre_technique_id T0816, lm_severity critical; priority:1; sid:9100003; rev:2;)
 
-alert modbus !$ENG_WS any -> $OT_NET 502 (msg:"LM-OT Modbus Read Device Identification (fingerprinting)"; modbus: function 43; classtype:attempted-recon; metadata:mitre_ics T0846, lm_severity medium; priority:2; sid:9100004; rev:1;)
+alert modbus !$ENG_WS any -> $OT_NET 502 (msg:"LM-OT Modbus Read Device Identification (fingerprinting)"; modbus: function 43; classtype:attempted-recon; metadata:mitre_technique_id T0846, lm_severity medium; priority:2; sid:9100004; rev:2;)
 
-alert modbus any any -> $OT_NET 502 (msg:"LM-OT Modbus user-defined or reserved function code"; modbus: function user; classtype:protocol-command-decode; metadata:mitre_ics T0855, lm_severity medium; priority:2; sid:9100005; rev:1;)
+alert modbus any any -> $OT_NET 502 (msg:"LM-OT Modbus user-defined or reserved function code"; modbus: function user; classtype:protocol-command-decode; metadata:mitre_technique_id T0855, lm_severity medium; priority:2; sid:9100005; rev:2;)
 
-alert tcp !$OT_WRITERS any -> $OT_NET 502 (msg:"LM-OT Modbus scan - many connections from one host"; flow:to_server; flags:S; threshold:type both, track by_src, count 20, seconds 60; classtype:attempted-recon; metadata:mitre_ics T0846, lm_severity high; priority:2; sid:9100006; rev:1;)
+alert tcp !$OT_WRITERS any -> $OT_NET 502 (msg:"LM-OT Modbus scan - many connections from one host"; flow:to_server; flags:S; threshold:type both, track by_src, count 20, seconds 60; classtype:attempted-recon; metadata:mitre_technique_id T0846, lm_severity high; priority:2; sid:9100006; rev:2;)
 
 # Request flood, two tiers. dsize:>0 counts request packets, not bare TCP ACKs. The first request
 # of each connection is not counted (it arrives before the Modbus parser is attached), so a burst
@@ -32,34 +32,34 @@ alert tcp !$OT_WRITERS any -> $OT_NET 502 (msg:"LM-OT Modbus scan - many connect
 # 9100008: 2000 requests in 10 s (200 req/s) from ANY host, to catch a flood from a compromised
 #   allowed host (HMI/SCADA). The fastest legitimate poller we have data for, the master in
 #   ITI ModbusTCP (~62 req/s), peaks at 663 per 10 s: ~3x headroom. (rev 1 used 1000, only ~1.5x.)
-alert modbus !$OT_WRITERS any -> $OT_NET 502 (msg:"LM-OT Modbus request flood from unknown host"; flow:to_server,established; dsize:>0; threshold:type both, track by_src, count 300, seconds 10; classtype:attempted-dos; metadata:mitre_ics T0814, lm_severity medium; priority:2; sid:9100007; rev:2;)
+alert modbus !$OT_WRITERS any -> $OT_NET 502 (msg:"LM-OT Modbus request flood from unknown host"; flow:to_server,established; dsize:>0; threshold:type both, track by_src, count 300, seconds 10; classtype:attempted-dos; metadata:mitre_technique_id T0814, lm_severity medium; priority:2; sid:9100007; rev:3;)
 
-alert modbus any any -> $OT_NET 502 (msg:"LM-OT Modbus request flood from any host (incl. allowed writers)"; flow:to_server,established; dsize:>0; threshold:type both, track by_src, count 2000, seconds 10; classtype:attempted-dos; metadata:mitre_ics T0814, lm_severity medium; priority:2; sid:9100008; rev:2;)
+alert modbus any any -> $OT_NET 502 (msg:"LM-OT Modbus request flood from any host (incl. allowed writers)"; flow:to_server,established; dsize:>0; threshold:type both, track by_src, count 2000, seconds 10; classtype:attempted-dos; metadata:mitre_technique_id T0814, lm_severity medium; priority:2; sid:9100008; rev:3;)
 
 # ---------- DNP3 (port 20000) ----------
-alert dnp3 any any -> $OT_NET any (msg:"LM-OT DNP3 Cold Restart command"; dnp3_func:13; classtype:attempted-dos; metadata:mitre_ics T0816, lm_severity critical; priority:1; sid:9100010; rev:1;)
+alert dnp3 any any -> $OT_NET any (msg:"LM-OT DNP3 Cold Restart command"; dnp3_func:13; classtype:attempted-dos; metadata:mitre_technique_id T0816, lm_severity critical; priority:1; sid:9100010; rev:2;)
 
-alert dnp3 any any -> $OT_NET any (msg:"LM-OT DNP3 Warm Restart command"; dnp3_func:14; classtype:attempted-dos; metadata:mitre_ics T0816, lm_severity high; priority:1; sid:9100011; rev:1;)
+alert dnp3 any any -> $OT_NET any (msg:"LM-OT DNP3 Warm Restart command"; dnp3_func:14; classtype:attempted-dos; metadata:mitre_technique_id T0816, lm_severity high; priority:1; sid:9100011; rev:2;)
 
-alert dnp3 !$DNP3_MASTERS any -> $OT_NET any (msg:"LM-OT DNP3 Direct Operate from non-master"; dnp3_func:5; classtype:policy-violation; metadata:mitre_ics T0855, lm_severity critical; priority:1; sid:9100012; rev:1;)
+alert dnp3 !$DNP3_MASTERS any -> $OT_NET any (msg:"LM-OT DNP3 Direct Operate from non-master"; dnp3_func:5; classtype:policy-violation; metadata:mitre_technique_id T0855, lm_severity critical; priority:1; sid:9100012; rev:2;)
 
-alert dnp3 !$DNP3_MASTERS any -> $OT_NET any (msg:"LM-OT DNP3 Write from non-master"; dnp3_func:2; classtype:policy-violation; metadata:mitre_ics T0836, lm_severity high; priority:1; sid:9100013; rev:1;)
+alert dnp3 !$DNP3_MASTERS any -> $OT_NET any (msg:"LM-OT DNP3 Write from non-master"; dnp3_func:2; classtype:policy-violation; metadata:mitre_technique_id T0836, lm_severity high; priority:1; sid:9100013; rev:2;)
 
-alert dnp3 !$DNP3_MASTERS any -> $OT_NET any (msg:"LM-OT DNP3 Select (control) from non-master"; dnp3_func:3; classtype:policy-violation; priority:1; metadata:mitre_ics T0855, lm_severity critical; sid:9100014; rev:1;)
+alert dnp3 !$DNP3_MASTERS any -> $OT_NET any (msg:"LM-OT DNP3 Select (control) from non-master"; dnp3_func:3; classtype:policy-violation; priority:1; metadata:mitre_technique_id T0855, lm_severity critical; sid:9100014; rev:2;)
 
-alert dnp3 !$DNP3_MASTERS any -> $OT_NET any (msg:"LM-OT DNP3 Operate from non-master"; dnp3_func:4; classtype:policy-violation; priority:1; metadata:mitre_ics T0855, lm_severity critical; sid:9100015; rev:1;)
+alert dnp3 !$DNP3_MASTERS any -> $OT_NET any (msg:"LM-OT DNP3 Operate from non-master"; dnp3_func:4; classtype:policy-violation; priority:1; metadata:mitre_technique_id T0855, lm_severity critical; sid:9100015; rev:2;)
 
-alert dnp3 !$DNP3_MASTERS any -> $OT_NET any (msg:"LM-OT DNP3 Disable Unsolicited Responses (operator loses alarms)"; dnp3_func:21; classtype:attempted-dos; priority:1; metadata:mitre_ics T0878, lm_severity critical; sid:9100016; rev:1;)
+alert dnp3 !$DNP3_MASTERS any -> $OT_NET any (msg:"LM-OT DNP3 Disable Unsolicited Responses (operator loses alarms)"; dnp3_func:21; classtype:attempted-dos; priority:1; metadata:mitre_technique_id T0878, lm_severity critical; sid:9100016; rev:2;)
 
-alert dnp3 any any -> $OT_NET any (msg:"LM-OT DNP3 Delete File on outstation"; dnp3_func:27; classtype:attempted-dos; priority:1; metadata:mitre_ics T0809, lm_severity critical; sid:9100017; rev:1;)
+alert dnp3 any any -> $OT_NET any (msg:"LM-OT DNP3 Delete File on outstation"; dnp3_func:27; classtype:attempted-dos; priority:1; metadata:mitre_technique_id T0809, lm_severity critical; sid:9100017; rev:2;)
 
 # ---------- EtherNet/IP / CIP (port 44818) ----------
-alert enip !$ENG_WS any -> $OT_NET 44818 (msg:"LM-OT ENIP List Identity discovery from non-engineering host"; enip_command:99; classtype:attempted-recon; metadata:mitre_ics T0846, lm_severity medium; priority:2; sid:9100020; rev:1;)
+alert enip !$ENG_WS any -> $OT_NET 44818 (msg:"LM-OT ENIP List Identity discovery from non-engineering host"; enip_command:99; classtype:attempted-recon; metadata:mitre_technique_id T0846, lm_severity medium; priority:2; sid:9100020; rev:2;)
 
 # ---------- Siemens S7comm (port 102) ----------
 # S7 has no Suricata parser; this is a byte-level match on the S7 "PLC Stop" job (function 0x29).
 # Validate offsets against real pcaps before trusting it; Zeek + CISA icsnpp-s7comm is the better tool for S7.
-alert tcp !$ENG_WS any -> $OT_NET 102 (msg:"LM-OT S7comm PLC STOP request"; flow:to_server,established; content:"|03 00|"; depth:2; content:"|32 01|"; distance:5; within:2; content:"|29|"; distance:8; within:1; classtype:attempted-dos; metadata:mitre_ics T0858, mitre_ics T0816, lm_severity critical; priority:1; sid:9100030; rev:1;)
+alert tcp !$ENG_WS any -> $OT_NET 102 (msg:"LM-OT S7comm PLC STOP request"; flow:to_server,established; content:"|03 00|"; depth:2; content:"|32 01|"; distance:5; within:2; content:"|29|"; distance:8; within:1; classtype:attempted-dos; metadata:mitre_technique_id T0858, mitre_technique_id T0816, lm_severity critical; priority:1; sid:9100030; rev:2;)
 
 # ---------- IT -> OT boundary ----------
-alert tcp $IT_NET any -> $OT_NET [445,3389,5900,22] (msg:"LM-OT Remote service connection from IT into OT"; flow:to_server; flags:S; classtype:policy-violation; metadata:mitre_ics T0886, lm_severity high; priority:1; sid:9100040; rev:1;)
+alert tcp $IT_NET any -> $OT_NET [445,3389,5900,22] (msg:"LM-OT Remote service connection from IT into OT"; flow:to_server; flags:S; classtype:policy-violation; metadata:mitre_technique_id T0886, lm_severity high; priority:1; sid:9100040; rev:2;)
