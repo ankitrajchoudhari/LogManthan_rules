@@ -1,0 +1,2 @@
+{"dest_ip": "10.10.1.10", "dest_port": 502, "metadata": {"event_code": 2250002, "product": {"name": "Suricata"}}, "msg": "SURICATA Modbus unsolicited response", "src_endpoint": {"ip": "10.10.1.66"}, "src_port": 45614, "timestamp": "2026-11-26T13:22:27.259085+0000"}
+{"dest_ip": "10.10.1.66", "dest_port": 45614, "metadata": {"event_code": 2250002, "product": {"name": "Suricata"}}, "msg": "SURICATA Modbus unsolicited response", "src_endpoint": {"ip": "10.10.1.10"}, "src_port": 502, "timestamp": "2026-11-26T13:22:27.259107+0000"}

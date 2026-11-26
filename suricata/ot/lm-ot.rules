@@ -6,7 +6,11 @@
 #   DNP3_MASTERS  : SCADA masters allowed to send DNP3 control commands
 #   IT_NET        : corporate IT networks (Purdue L4-L5)
 # Enable parsers in suricata.yaml -> app-layer.protocols: modbus, dnp3, enip (enabled: yes)
-# Set stream.reassembly.depth: 0 for long-lived Modbus sessions.
+# Stream depth: on Suricata 8.0.7, Modbus and DNP3 are inspected only for the first
+# stream.reassembly.depth bytes of each connection direction (default 1 MiB). Measured in the lab:
+# a write or restart after 1 MiB on one connection is missed (app-layer.protocols.modbus.stream-depth
+# does not change this). Raise the global depth per site if needed; never set it to 0.
+# See README "Stream reassembly depth" and tests lab_*_long_session.
 # SID range 9100001+ reserved for LogManthan OT rules.
 # priority:1 -> LogManthan Critical (opens a case); priority:2 -> Medium (alert + Sigma correlation only).
 

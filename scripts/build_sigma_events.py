@@ -50,7 +50,7 @@ def lab_captures(fixtures):
         path = fx.get("path", "")
         if path.startswith("tests/suricata/lab/") and path not in seen:
             seen.add(path)
-            out.append((Path(path).stem, fx))
+            out.append((Path(path).name.split(".")[0], fx))  # lab_x.pcap / lab_x.pcap.gz -> lab_x
     return out
 
 

@@ -13,6 +13,7 @@ External captures are downloaded to .cache/ and never committed; our own lab cap
 tests/suricata/lab/. Every capture is verified by SHA-256 before use.
 """
 
+import gzip
 import hashlib
 import json
 import os
@@ -188,12 +189,25 @@ def sha256(path):
 
 
 def fetch(fx):
-    """Return a verified capture: a repo file ("path") or a download cached in .cache/ ("url")."""
+    """Return a verified capture: a repo file ("path") or a download cached in .cache/ ("url").
+
+    A repo capture ending in .pcap.gz (the long-session captures, too big to commit raw) is
+    verified by the SHA-256 of the .gz file and unpacked into .cache/ for Suricata.
+    """
     if "path" in fx:
         dest = ROOT / fx["path"]
         got = sha256(dest)
         if got != fx["sha256"]:
             raise ValueError(f"SHA-256 mismatch (expected {fx['sha256']}, got {got}); refusing capture")
+        if dest.name.endswith(".pcap.gz"):
+            CACHE.mkdir(parents=True, exist_ok=True)
+            unpacked = CACHE / f"{fx['sha256'][:16]}.pcap"
+            if not unpacked.exists():
+                tmp = unpacked.with_suffix(".part")
+                with gzip.open(dest, "rb") as src, open(tmp, "wb") as out:
+                    shutil.copyfileobj(src, out)
+                tmp.replace(unpacked)
+            return unpacked
         return dest
     CACHE.mkdir(parents=True, exist_ok=True)
     dest = CACHE / f"{fx['sha256'][:16]}.pcap"  # keyed by content: fixtures sharing a capture share one download
@@ -441,7 +455,7 @@ def main():
             fx_vars = var_sets[fx["vars"]] if "vars" in fx else variables
             try:
                 pcap = fetch(fx)
-                events = replay_eve(pcap, rules, fx_vars)
+                events = replay_eve(pcap, rules, fx_vars, fx.get("sets", ()))
                 got = sorted(lm_sids(events))
                 decode = decode_problems(events, fx["app_proto"]) if "app_proto" in fx else []
             except Exception as exc:  # report and continue with the next fixture
@@ -461,6 +475,7 @@ def main():
             ok = ok and not decode
             mode = "exact" if fx.get("exact") else fx["expect"]
             print(f"  {'PASS' if ok else 'FAIL'} {fx['id']} expected={mode}:{expected} got={got}"
+                  + (f" sets={','.join(fx['sets'])}" if fx.get("sets") else "")
                   + (f" decoded={fx['app_proto']}" if "app_proto" in fx and not decode else "")
                   + (f"  <- not cleanly decoded as {fx['app_proto']}: {'; '.join(decode[:3])}" if decode else ""))
             passed += ok

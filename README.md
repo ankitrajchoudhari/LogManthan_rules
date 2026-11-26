@@ -70,6 +70,7 @@ Facts to keep in mind:
 | LogManthan ingests Suricata **alerts only** | No flow, protocol or packet logs reach it. If Suricata does not alert, LogManthan never sees it. |
 | Only **priority 1** opens a case | Use priority 1 only for actions that change the process or blind the operator (writes, restarts, listen-only, stop, delete, disabling alarms). Recon is priority 2. |
 | Suricata's Modbus, DNP3 and ENIP parsers are **off by default** | Each site must set `app-layer.protocols.modbus.enabled: yes` (and `dnp3`, `enip`) in `suricata.yaml`, or the protocol rules never match. |
+| Modbus and DNP3 are inspected only for the **first 1 MiB per connection direction** (`stream.reassembly.depth`, default 1 MiB) | A write or restart sent after that on the same long-lived connection is not seen. `app-layer.protocols.modbus.stream-depth` does not change this on 8.0.7. See [Stream reassembly depth](#stream-reassembly-depth). |
 | Suricata has **no S7comm or IEC-104 parser** | The S7 rule matches raw bytes on TCP 102. There is no IEC-104 rule. |
 | Rules are **alert-only** | No `drop`, `reject` or `pass`. Nothing is blocked or isolated automatically. |
 
@@ -91,7 +92,7 @@ Facts to keep in mind:
 | `scripts/build_sigma_events.py` | Rebuilds (or checks) the Sigma test events from the lab captures. |
 | `tests/suricata/fixtures.json` | Every test capture: where it is, its SHA-256 and which SIDs must (or must not) fire. |
 | `tests/suricata/tuning.json` | Event-alert limits per capture for the tuning test. |
-| `tests/suricata/lab/` | Our own lab captures (13 pcaps), one per scenario plus two normal-traffic baselines. |
+| `tests/suricata/lab/` | Our own lab captures: 13 pcaps (one per scenario plus two normal-traffic baselines) and 2 gzipped long-session captures (`*.pcap.gz`). |
 | `tests/sigma/events/` | Suricata alerts replayed from the lab captures, used as Sigma test input. |
 | `tests/sigma/scenarios.json` | Correlation scenarios and their expected results. |
 | `lab/docker-compose.yml` | The OT lab: network, containers and hardening. |
@@ -148,7 +149,7 @@ make test
 ```
 
 The first run pulls the Suricata image and downloads the external captures into `.cache/`. After
-that it takes about 40 seconds. The end of the output should look like this (shortened):
+that it takes about 45 seconds. The end of the output should look like this (shortened):
 
 ```text
 == Lint ==
@@ -162,10 +163,14 @@ that it takes about 40 seconds. The end of the output should look like this (sho
   PASS lab_write expected=exact:[9100001] got=[9100001]
   ...
   PASS lab_dnp3_master_normal expected=silent:[] got=[] decoded=dnp3
-26/26 dynamic tests passed
+  PASS lab_modbus_long_session expected=absent:[9100001] got=[]
+  PASS lab_modbus_long_session_depth_10mb expected=exact:[9100001] got=[9100001] sets=stream.reassembly.depth=10mb
+  PASS lab_dnp3_long_session expected=absent:[9100010] got=[]
+  PASS lab_dnp3_long_session_depth_10mb expected=exact:[9100010] got=[9100010] sets=stream.reassembly.depth=10mb decoded=dnp3
+30/30 dynamic tests passed
 == Tuning (bundled Modbus/DNP3 event rules + tuning/threshold.config) ==
   ...
-  total event alerts: 15475 before -> 25 after tuning
+  total event alerts: 32240 before -> 29 after tuning
   PASS: event-alert volume within limits, nothing silenced, LM-OT SIDs unchanged
 ```
 
@@ -213,7 +218,7 @@ the older `mitre_ics` key is not read, so the lint rejects it. A rule with two t
 
 | SID | Message (after `LM-OT`) | Priority | MITRE ATT&CK for ICS | Covered by test |
 |---|---|---|---|---|
-| 9100001 | Modbus write from unauthorised host | 1 | T0855, T0836 | `bro_modbus_modbus`, `lab_write` |
+| 9100001 | Modbus write from unauthorised host | 1 | T0855, T0836 | `bro_modbus_modbus`, `lab_write`, `lab_modbus_long_session_depth_10mb` |
 | 9100002 | Modbus diagnostics Force Listen Only Mode (device goes silent) | 1 | T0814 | `bro_modbus_modbus`, `lab_listen_only` |
 | 9100003 | Modbus diagnostics Restart Communications | 1 | T0816 | `bro_modbus_modbus`, `lab_restart_comms` |
 | 9100004 | Modbus Read Device Identification (fingerprinting) | 2 | T0846 | `bro_modbus_modbus`, `lab_scan` |
@@ -221,7 +226,7 @@ the older `mitre_ics` key is not read, so the lint rejects it. A rule with two t
 | 9100006 | Modbus scan - many connections from one host | 2 | T0846 | `lab_scan` |
 | 9100007 | Modbus request flood from unknown host | 2 | T0814 | `lab_flood`, `lab_flood_heavy` |
 | 9100008 | Modbus request flood from any host (incl. allowed writers) | 2 | T0814 | `lab_flood_heavy`, `lab_flood_heavy_allowed_writer` |
-| 9100010 | DNP3 Cold Restart command | 1 | T0816 | `dnp3_cold_restart_and_response`, `lab_dnp3_cold_restart` |
+| 9100010 | DNP3 Cold Restart command | 1 | T0816 | `dnp3_cold_restart_and_response`, `lab_dnp3_cold_restart`, `lab_dnp3_long_session_depth_10mb` |
 | 9100011 | DNP3 Warm Restart command | 1 | T0816 | `dnp3_warm_restart_and_response`, `lab_dnp3_warm_restart` |
 | 9100012 | DNP3 Direct Operate from non-master | 1 | T0855 | `dnp3_directoperate_and_response`, `dnp3_direct_operate_analog_output`, `lab_dnp3_direct_operate` |
 | 9100013 | DNP3 Write from non-master | 1 | T0836 | `dnp3_write_binary_output`, `lab_dnp3_write` |
@@ -239,6 +244,11 @@ real S7 capture before anyone relies on it.
 
 Tests that must stay **silent** (no LM-OT alert at all): `dnp3_read_and_response`, `lab_hmi_normal`,
 `lab_dnp3_master_normal`. And `iti_modbustcp_master_allowed` must not raise 9100007 or 9100008.
+
+Known blind spot, tested on purpose: `lab_modbus_long_session` and `lab_dnp3_long_session` must
+**not** raise 9100001 / 9100010 at default settings, because the command comes after 1 MiB on one
+connection (see [Stream reassembly depth](#stream-reassembly-depth)). Their `_depth_10mb` twins
+prove the rules fire once the depth is raised.
 
 ### Address groups
 
@@ -324,12 +334,14 @@ A lab capture:
 |---|---|
 | `id` | Test name, shown in the output and referenced in `SIDS.md`. |
 | `url` | External capture. Downloaded into `.cache/` at test time, never committed. |
-| `path` | Capture stored in this repository (lab captures only). |
+| `path` | Capture stored in this repository (lab captures only). A `.pcap.gz` file is checked by its own SHA-256 and unpacked into `.cache/` before replay. |
 | `sha256` | Checked before every use. A changed file fails the test. |
 | `expect` | `fire`: every SID in `expect_sids` must fire. `silent`: no LM-OT SID may fire. `absent`: none of `expect_sids` may fire (other SIDs may). |
 | `exact` | With `fire`: no other LM-OT SID may fire either. All lab captures use this. |
 | `app_proto` | Every flow must be decoded as this protocol, with no anomaly events. Used for the DNP3 lab captures, to prove our lab DNP3 is valid DNP3. |
 | `vars` | Which address-group set to use, from `var_sets` at the top of the file. Without it, the top-level `vars` are used. |
+| `sets` | Extra Suricata `--set` values for this fixture only, for example `["stream.reassembly.depth=10mb"]`. |
+| `note` | Free text explaining the fixture; ignored by the runner. |
 
 The top-level `vars` use the documentation range `203.0.113.0/24`. The `lab` set uses the lab
 addresses. `lab_compromised_writer` adds the attacker to `OT_WRITERS`, to test 9100008 (a flood from a
@@ -341,7 +353,8 @@ busy real master does not trigger the flood rules.
 - **External** captures come from ITI ICS-Security-Tools (CC BY 4.0). They are fetched by URL and
   pinned by SHA-256, so the repository never stores third-party files.
 - **Lab** captures are recorded from our own Docker lab (`make record-fixtures`, see section 8) and
-  are the only pcaps committed (`tests/suricata/lab/`, 13 files).
+  are the only pcaps committed (`tests/suricata/lab/`: 13 `.pcap` files and 2 `.pcap.gz` long-session
+  captures, which are 16.4 MB and 8.8 MB unpacked).
 
 ### Why replays run single-threaded
 
@@ -426,6 +439,8 @@ Run one scenario, then check its alert. `--src 10.10.1.66` limits the output to 
 | `make attack SCENARIO=dnp3-direct-operate` | DNP3 FC5 Direct Operate (CROB, output 0) | 9100012 | 1 |
 | `make attack SCENARIO=dnp3-write` | DNP3 FC2 Write (time and date) | 9100013 | 1 |
 | `make attack SCENARIO=dnp3-disable-unsolicited` | DNP3 FC21 Disable Unsolicited, classes 1-3 | 9100016 | 1 |
+| `make attack SCENARIO=modbus-long-session` | One connection: 1.1 MiB of FC1 read-coil polling (about 4 minutes), then an FC6 write | **none** at default depth; 9100001 with a raised depth | 1 |
+| `make attack SCENARIO=dnp3-long-session` | One connection: 1.1 MiB of class 1-3 polls (about 1 minute), then an FC13 Cold Restart | **none** at default depth; 9100010 with a raised depth | 1 |
 
 Example, the write attack:
 
@@ -622,15 +637,28 @@ Measured by `make test` on Suricata 8.0.7:
 | lab `lab_flood` | 1000 | 1 | 1 |
 | lab `lab_flood_heavy` | 3000 | 1 | 1 |
 | lab `lab_hmi_normal` (130 s of normal HMI) | 127 | 1 | 1 |
+| lab `lab_modbus_long_session` (2250002 unsolicited response, see below) | 15890 | 2 | 2 |
+| lab `lab_dnp3_long_session` (2270000 flooded, see below) | 875 | 2 | 2 |
 | 20 other captures | 0 | 0 | 0 |
-| **Total** | **15475** | **25** | |
+| **Total** | **32240** | **29** | |
 
 ```text
   PASS iti_modbustcp                            6331     19     19  2250002:2 2250003:2 2250006:2 2250008:13
   PASS bro_modbus_modbus                        5017      3      3  2250008:2 2250009:1
   ...
-  total event alerts: 15475 before -> 25 after tuning
+  PASS lab_modbus_long_session                 15890      2      2  2250002:2
+  PASS lab_dnp3_long_session                     875      2      2  2270000:2
+  total event alerts: 32240 before -> 29 after tuning
 ```
+
+The two long-session captures raise event alerts for different reasons:
+
+- **Modbus `unsolicited response` (2250002)** appears only at the default depth. Once the request
+  side of the connection passes 1 MiB, Suricata stops seeing the requests but still sees the
+  responses, so every response looks unsolicited. With the depth raised to 10 MB there are none.
+  On a real network, a burst of this event on one long connection is a sign that depth was reached.
+- **DNP3 `flooded` (2270000)** appears with and without the depth limit. It comes from the lab
+  scenario itself, which keeps 50 polls outstanding at once; a real master waits for each response.
 
 ### The "Data mismatch" problem (sawp-modbus issue #13)
 
@@ -653,6 +681,58 @@ fails on a new Suricata until the limits are re-measured.
 **TODO(rajeev):** decide how this file reaches LogManthan's Suricata: point `threshold-file:` at it,
 or merge its lines into LogManthan's existing `threshold.config`. Load it together with **both** bundled
 rule files, or Suricata warns about unknown SIDs.
+
+### Stream reassembly depth
+
+Suricata reassembles each TCP connection and hands the data to the Modbus and DNP3 parsers only up
+to `stream.reassembly.depth` bytes **per direction**. The default is **1 MiB**. After that, nothing
+more on that connection reaches the parser, so no rule can match.
+
+Measured on Suricata 8.0.7 with two lab captures. Each one is a single TCP connection that sends a
+little over 1.1 MiB of normal polling and then one command on the same connection:
+
+| Capture | Default settings | `stream.reassembly.depth=10mb` |
+|---|---|---|
+| `lab_modbus_long_session`: 1,153,440 B of FC1 polling, then FC6 write | 9100001 **not raised** | 9100001 raised |
+| `lab_dnp3_long_session`: 1,154,400 B of class 1-3 polls, then FC13 Cold Restart | 9100010 **not raised** | 9100010 raised |
+
+Notes:
+
+- Suricata's default config sets `app-layer.protocols.modbus.stream-depth: 0` ("track it
+  completely"). On 8.0.7 this has no measurable effect: with 0, 2 MB or 10 MB the write is still
+  missed and Suricata's `tcp.stream_depth_reached` counter still goes up. Only the global
+  `stream.reassembly.depth` changes the result.
+- DNP3 has no per-protocol depth setting at all.
+- Both results are in the test suite (`absent` at default, exact `fire` with the depth raised), so a
+  future Suricata version that changes this will show up as a test failure.
+
+**When this matters.** An attacker who opens a new connection is not affected: the command comes
+early in that connection. The blind spot is a **long-lived** connection that has already carried
+1 MiB, for example a compromised HMI or SCADA master that sends a bad write or a flood (9100008) on
+its existing session. How quickly a connection gets there depends on the poll rate:
+
+| Poller | Client-to-server bytes | 1 MiB reached after |
+|---|---|---|
+| Lab HMI (`lab_hmi_normal`, 2 reads/s) | ~24 B/s | ~12 hours |
+| Lab DNP3 master (`lab_dnp3_master_normal`) | ~12 B/s | ~24 hours |
+| ITI ModbusTCP master (~62 requests/s), if its requests are 12-byte reads | ~740 B/s | ~25 minutes |
+
+**What a site can do.** Raise the **global** `stream.reassembly.depth` in that client's
+`suricata.yaml` so that it covers the bytes its OT masters send between reconnects:
+
+```yaml
+stream:
+  reassembly:
+    depth: 20 MiB   # example only: size it from the site's poll rate and reconnect interval
+```
+
+This is a trade-off, as Rajeev pointed out. The setting is global, so Suricata keeps reassembling
+and inspecting **every** TCP connection further, not only OT ones. That costs memory (watch
+`stream.reassembly.memcap`, 256 MiB in the default config, and the `tcp.reassembly_memuse` and
+`tcp.segment_memcap_drop` counters) and CPU. Measure on the site's sensor before and after.
+
+**Never set `stream.reassembly.depth: 0` (unlimited) globally.** It removes the limit for all
+traffic, including large file transfers and backups, and can exhaust the reassembly memory.
 
 More detail: [tuning/README.md](tuning/README.md).
 
@@ -776,7 +856,7 @@ make test
 == Static (suricata -T) ==
   PASS: rules load (0 warnings, 0 ignored)
 == Dynamic (pcap replay) ==
-26/26 dynamic tests passed
+30/30 dynamic tests passed
 == Tuning (bundled Modbus/DNP3 event rules + tuning/threshold.config) ==
   PASS: event-alert volume within limits, nothing silenced, LM-OT SIDs unchanged
 ```
@@ -920,6 +1000,14 @@ detection are not affected. It is the one warning listed in `IGNORED_WARNINGS`, 
 The bundled event rules are taken from the Suricata binary under test, and their SIDs can change
 between versions. Run with the pinned image (`make test`). When moving to a new Suricata version,
 re-measure the limits and update `suricata_version` in `tests/suricata/tuning.json`.
+
+**An OT command on a long-lived connection raised no alert, or you see many `SURICATA Modbus
+unsolicited response` alerts on one connection.**
+The connection has probably passed `stream.reassembly.depth` (1 MiB per direction by default), after
+which Suricata no longer parses it. Check the `tcp.stream_depth_reached` counter in `stats.log` or
+the eve `stats` events. See [Stream reassembly depth](#stream-reassembly-depth): raise the global
+depth for that site, never to 0. Setting `app-layer.protocols.modbus.stream-depth` does not help
+on 8.0.7.
 
 **A recorded lab capture is empty or misses the attack.**
 `make attack` rebuilds the attacker image when its files change. If that rebuild happens while a

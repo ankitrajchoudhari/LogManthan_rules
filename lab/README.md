@@ -57,6 +57,8 @@ make lab-down
 | `dnp3-direct-operate` | DNP3 FC5 Direct Operate, CROB (pulse on) on output 0 | T0855 | 9100012 | 1 |
 | `dnp3-write` | DNP3 FC2 Write, g50v1 time and date | T0836 | 9100013 | 1 |
 | `dnp3-disable-unsolicited` | DNP3 FC21 Disable Unsolicited for classes 1–3 | T0878 | 9100016 | 1 |
+| `modbus-long-session` | One connection: 1.1 MiB of pipelined FC1 read-coil polling (~4 min), then FC6 write HR0 | T0855, T0836 | none at default depth (9100001 with a raised depth) | 1 |
+| `dnp3-long-session` | One connection: 1.1 MiB of pipelined class 1–3 polls (~1 min), then FC13 Cold Restart | T0816 | none at default depth (9100010 with a raised depth) | 1 |
 
 DNP3 scenarios target the outstation 10.10.1.11 by default and reuse the master's link address 1:
 DNP3 has no authentication without Secure Authentication, so only the source IP gives the attacker away.
@@ -134,6 +136,11 @@ attacker, the baselines to the HMI or master). DNP3 fixtures also set `app_proto
 unless Suricata decodes every flow as DNP3 with no anomaly events. The test
 runner replays them with the lab address groups and exact matching. Then update the `sha256` values in
 `tests/suricata/fixtures.json` with the ones the script prints.
+
+The two long-session captures (`modbus-long-session`, `dnp3-long-session`) are 16.4 MB and 8.8 MB, so
+the recorder stores them gzipped (`lab_*_long_session.pcap.gz`, 2.8 MB and 1.2 MB); the test runner
+unpacks them into `.cache/`. The lab PLC (pymodbus) answers at most 20 pipelined requests at a time,
+which is why the Modbus scenario sends 20 per segment.
 
 ## Troubleshooting
 

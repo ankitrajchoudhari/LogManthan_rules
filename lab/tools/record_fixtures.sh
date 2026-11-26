@@ -24,10 +24,14 @@ wait_capture_started() {
   sleep 2   # let tcpdump open the interface
 }
 
-save() {  # save <capture name>
-  cp "lab/out/$1.pcap" "$DEST/lab_$1.pcap"
-  sum=$(sha256sum "$DEST/lab_$1.pcap" | cut -d' ' -f1)
-  echo "record: lab_$1 $(wc -c < "$DEST/lab_$1.pcap") bytes sha256 $sum"
+save() {  # save <capture name>; long sessions (several MB) are stored gzipped
+  out="$DEST/lab_$1.pcap"
+  case "$1" in
+    *_long_session) gzip -9 -n -c "lab/out/$1.pcap" > "$out.gz"; out="$out.gz" ;;
+    *) cp "lab/out/$1.pcap" "$out" ;;
+  esac
+  sum=$(sha256sum "$out" | cut -d' ' -f1)
+  echo "record: $(basename "$out") $(wc -c < "$out") bytes sha256 $sum"
 }
 
 record_attack() {  # record_attack <scenario> <seconds> [capture name] [extra attacker args...]
@@ -67,7 +71,7 @@ record_dnp3_master() {  # record_dnp3_master <seconds>
 # Build the attacker image first, so a rebuild never eats into a capture window.
 $COMPOSE --profile attack build attacker > /dev/null
 
-[ $# -eq 0 ] && set -- scan write listen-only restart-comms flood flood-heavy hmi   dnp3-cold-restart dnp3-warm-restart dnp3-direct-operate dnp3-write dnp3-disable-unsolicited dnp3-master
+[ $# -eq 0 ] && set -- scan write listen-only restart-comms flood flood-heavy hmi   dnp3-cold-restart dnp3-warm-restart dnp3-direct-operate dnp3-write dnp3-disable-unsolicited dnp3-master modbus-long-session dnp3-long-session
 for s in "$@"; do
   case "$s" in
     scan)  record_attack scan 25 ;;
@@ -78,6 +82,9 @@ for s in "$@"; do
     dnp3-cold-restart|dnp3-warm-restart|dnp3-direct-operate|dnp3-write|dnp3-disable-unsolicited)
            record_attack "$s" 12 ;;
     dnp3-master) record_dnp3_master 600 ;;
+    # One connection with more than 1 MiB of polling, then a command (stream reassembly depth test).
+    modbus-long-session) record_attack "$s" 330 ;;
+    dnp3-long-session) record_attack "$s" 150 ;;
     *) echo "record: unknown scenario $s" >&2; exit 2 ;;
   esac
 done

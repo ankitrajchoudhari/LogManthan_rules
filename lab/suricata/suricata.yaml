@@ -70,10 +70,13 @@ app-layer:
         dp: 44818
         sp: 44818
 
+# stream.reassembly.depth is left at Suricata's default (1 MiB per direction), as in production.
+# Measured on 8.0.7: Modbus and DNP3 commands after the first 1 MiB of one connection are not seen,
+# and app-layer.protocols.modbus.stream-depth does not change that (tests: lab_*_long_session*).
+# The lab HMI sends ~24 B/s to the PLC and the DNP3 master ~12 B/s, so their own connections reach
+# 1 MiB after ~12 h and ~24 h; restart them (make lab-down && make lab-up) for longer exercises.
 stream:
   midstream: true
-  reassembly:
-    depth: 0           # long-lived Modbus and DNP3 sessions
 
 security:
   lua:
