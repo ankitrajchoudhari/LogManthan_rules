@@ -34,8 +34,9 @@ Every base rule requires `metadata.product.name: Suricata`, because Wazuh rule I
 The test fails if a rule uses a field that file does not list, or if a base rule leaves out the
 product condition.
 
-Verified by Rajeev on LogManthan's Sigma engine: 36/36 checks match (18 scenarios, two correlations
-each).
+Rajeev verified 36/36 checks on LogManthan's Sigma engine (18 scenarios, two correlations each) with
+the earlier field names (`signature_id`, `src_ip`). A re-check with `metadata.event_code`,
+`src_endpoint.ip` and the product condition is pending.
 
 ## Tests
 
@@ -80,4 +81,5 @@ if any base rule matches any of these events.
 The scenario check uses a small reference evaluator of the Sigma correlation semantics. It supports
 only what these rules use and fails on anything else. Dotted field names are paths into the nested
 event, and values are compared as text. Rajeev replayed the 18 lab scenarios through LogManthan's
-own engine and the results match this evaluator (36/36).
+own engine with the earlier field names and the results matched this evaluator (36/36); a re-check
+with the current field names is pending.

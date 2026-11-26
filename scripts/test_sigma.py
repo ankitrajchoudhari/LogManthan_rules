@@ -16,7 +16,8 @@ Step 4 uses a small reference evaluator of the Sigma correlation semantics, writ
 rules only (selections of field: value lists; event_count and temporal_ordered). It fails loudly
 on any construct it does not support. Field names with dots are paths into the nested event, and
 values are compared as text, as Sigma does. Rajeev replayed the 18 lab scenarios through
-LogManthan's own Sigma engine: 36/36 checks match this evaluator.
+LogManthan's own Sigma engine with the earlier field names (signature_id, src_ip): 36/36 checks
+matched this evaluator. A re-check with metadata.event_code / src_endpoint.ip is pending.
 
 Needs Python 3.11+ with sigma/requirements.txt installed (`make sigma-test`).
 """

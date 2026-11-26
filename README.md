@@ -689,8 +689,9 @@ alert. The `wazuh_same_event_code` scenario proves that such events match no rul
 The mapping is defined in one place, `sigma/pipelines/logmanthan-fields.yml`. The test fails if a rule
 uses a field that file does not list, or if a base rule leaves out the product condition.
 
-Verified by Rajeev on LogManthan's Sigma engine: 36/36 checks match (the 18 lab scenarios, two
-correlations each).
+Rajeev verified 36/36 checks on LogManthan's Sigma engine (the 18 lab scenarios, two correlations
+each) with the earlier field names (`signature_id`, `src_ip`). A re-check with `metadata.event_code`,
+`src_endpoint.ip` and the product condition is pending.
 
 ### Running the tests
 

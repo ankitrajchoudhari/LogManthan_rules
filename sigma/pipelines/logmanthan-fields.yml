@@ -1,8 +1,8 @@
 # Field names: the ONE place they are defined for LogManthan.
 #
 # Left: the field in Suricata's eve.json alert. Right: the name LogManthan's Sigma engine uses for it.
-# Confirmed by Rajeev on LogManthan's Sigma engine (all 18 correlation scenarios replayed there:
-# 36/36 checks match).
+# Field names given by Rajeev for LogManthan. He verified 36/36 checks on LogManthan's Sigma engine
+# with the earlier names (signature_id, src_ip); a re-check with these names is pending.
 #
 # The Sigma rules in sigma/rules/ are written with the LogManthan names (right-hand side), because
 # LogManthan loads the rules as they are. This mapping is for anyone converting a rule written with
